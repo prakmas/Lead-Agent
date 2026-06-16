@@ -1,17 +1,18 @@
-# Deploying CRR to Production (permanent, always-on)
+# Deploying CRR to Production (single Next.js app, always-on)
 
-This replaces the temporary `cloudflared` tunnel with a **fixed, always-on URL**
-so you register the Meta webhook **once** and your laptop is no longer involved.
+CRR is now **one Next.js app** (UI + API + WhatsApp webhook + follow-up
+scheduler) in `frontend/`. Deploy it as a **single always-on service on Railway**
+so the webhook URL is fixed and the scheduler runs 24/7 (a persistent server is
+required — serverless can't hold the `setInterval` follow-up loop).
 
-- **Backend** (Express + WhatsApp webhook) → **Railway** (fixed URL, runs 24/7)
-- **Frontend** (admin dashboard) → **Vercel** (free)
+- **App** (dashboard + `/api/*` + webhook + scheduler) → **Railway**
 - **Database** → **MongoDB Atlas** (already set up)
 
 After this, the webhook URL never changes again.
 
 ---
 
-## Part A — Backend to Railway
+## Deploy to Railway
 
 The Railway CLI is already installed (`railway --version`).
 
@@ -21,22 +22,22 @@ The Railway CLI is already installed (`railway --version`).
 railway login
 ```
 
-### 2. Create the project from the backend folder
+### 2. Create the project from the app folder
 
 ```bash
-cd /Users/praveenmaddela/Desktop/CRR/backend
-railway init        # give it a name, e.g. "crr-backend"
+cd /Users/praveenmaddela/Desktop/CRR/frontend
+railway init        # name it e.g. "crr"
 ```
 
-### 3. Push all your secrets to Railway (one command)
+### 3. Push all secrets to Railway (one command)
 
 ```bash
 ./scripts/railway-setenv.sh
 ```
 
-This uploads everything from `backend/.env` (Mongo URI, JWT secret, WhatsApp
-keys, Gemini key, Meta verify token, etc.), forces `NODE_ENV=production`, and
-skips `PORT` (Railway sets that itself).
+This uploads everything from `frontend/.env.local` (Mongo URI, JWT secret,
+WhatsApp keys, Gemini key, Meta verify token, etc.), forces
+`NODE_ENV=production`, and skips `PORT` (Railway sets it).
 
 ### 4. Deploy
 
@@ -44,105 +45,70 @@ skips `PORT` (Railway sets that itself).
 railway up
 ```
 
-### 5. Get your permanent public URL
+Railway runs `npm install` → `npm run build` → `npm start` (see
+`frontend/railway.json`).
+
+### 5. Get your permanent URL
 
 ```bash
-railway domain      # generates + prints e.g. https://crr-backend-production.up.railway.app
+railway domain      # e.g. https://crr-production.up.railway.app
 ```
 
-Quick check (replace with your URL):
+Check it:
 
 ```bash
-curl https://crr-backend-production.up.railway.app/api/health
+curl https://crr-production.up.railway.app/api/health
 ```
 
-### 6. Seed the admin user + demo data (once)
+### 6. Point CLIENT_URL at the deployed app (for dashboard CORS / same origin)
 
-Run these against the deployed DB. Easiest from your machine — they use the same
-Atlas URI:
+Since UI and API share one origin this is mostly a formality, but set it:
 
 ```bash
-cd /Users/praveenmaddela/Desktop/CRR/backend
-npm run seed:admin    # creates admin@crr.local / Admin@12345
-npm run seed:demo     # optional sample listings
+railway variables --set "CLIENT_URL=https://crr-production.up.railway.app"
 ```
 
-(Atlas is shared between local and Railway, so seeding locally populates prod.)
+### 7. Seed the admin user + demo data (once)
 
----
-
-## Part B — Point Meta at the permanent URL (do this ONCE)
-
-Meta → WhatsApp → Configuration → Webhook → Edit:
-
-- **Callback URL:** `https://<your-railway-domain>/webhooks/meta`
-- **Verify token:** the value of `META_VERIFY_TOKEN` in `backend/.env`
-  (currently `d91d382ae43a54f666663be2e538554ccbb97bc26f42604e`)
-
-Click **Verify and save**, ensure the **`messages`** field is subscribed.
-
-You never have to change this again.
-
----
-
-## Part C — Frontend to Vercel
-
-### 1. Install + log in
-
-```bash
-npm i -g vercel
-vercel login
-```
-
-### 2. Deploy the dashboard
+Run from your machine against the same Atlas DB:
 
 ```bash
 cd /Users/praveenmaddela/Desktop/CRR/frontend
-vercel            # follow prompts; accept defaults
+npm run seed:admin    # admin@crr.local / Admin@12345
+npm run seed:demo     # optional sample listings
 ```
 
-### 3. Set the API URL env var
+---
 
-In the Vercel dashboard (Project → Settings → Environment Variables), add:
+## Point Meta at the permanent URL (do this ONCE)
 
-```
-NEXT_PUBLIC_API_URL = https://<your-railway-domain>/api
-```
+Meta → WhatsApp → Configuration → Webhook → Edit:
 
-Then redeploy: `vercel --prod`
+- **Callback URL:** `https://<your-railway-domain>/api/webhooks/meta`
+- **Verify token:** value of `META_VERIFY_TOKEN` in `frontend/.env.local`
 
-### 4. Allow the frontend origin on the backend
+Click **Verify and save**, ensure the **`messages`** field is subscribed.
+You never have to change this again.
 
-Point the backend's CORS at your Vercel URL:
-
-```bash
-cd /Users/praveenmaddela/Desktop/CRR/backend
-railway variables --set "CLIENT_URL=https://<your-vercel-domain>"
-```
-
-(`CLIENT_URL` accepts a comma-separated list if you want to keep
-`http://localhost:3000` for local dev too.)
+> Note the path is now **`/api/webhooks/meta`** (Next.js routes live under `/api`).
 
 ---
 
 ## Production checklist (before real users)
 
 - [ ] **Rotate the WhatsApp access token** to a permanent System User token
-      (the current one is a ~24h test token). Update `WHATSAPP_ACCESS_TOKEN` in
-      Railway: `railway variables --set "WHATSAPP_ACCESS_TOKEN=..."`.
+      (current one is a ~24h test token). Update it:
+      `railway variables --set "WHATSAPP_ACCESS_TOKEN=..."`
 - [ ] **Set a strong `JWT_SECRET`** (not the placeholder) and re-run `seed:admin`.
 - [ ] **Change `ADMIN_PASSWORD`** from the default.
 - [ ] **Set `META_APP_SECRET`** so inbound webhooks are HMAC-verified.
-- [ ] Move off the WhatsApp **test number** to a real business number when ready
-      (this also lifts the allow-list restriction — you can message anyone who
-      messages you first, within the 24h window).
+- [ ] Move off the WhatsApp **test number** to a real business number when ready.
 - [ ] Add your **real listing inventory** via the dashboard.
 
 ## Redeploying after code changes
 
 ```bash
-cd backend && railway up        # backend
-cd frontend && vercel --prod    # frontend
+cd frontend && railway up
 ```
 
-That's it — fixed URLs, always on, no tunnel.
+That's it — one service, one fixed URL, always on, scheduler running.

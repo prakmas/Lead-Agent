@@ -1,39 +1,36 @@
 #!/usr/bin/env bash
 #
-# Starts the CRR backend + a public Cloudflare tunnel and prints the exact
-# values to paste into the Meta WhatsApp webhook configuration.
+# Starts the CRR app (single Next.js project) + a public Cloudflare tunnel and
+# prints the values to paste into the Meta WhatsApp webhook configuration.
 #
 # Usage:  ./start-realtime.sh
-# Stop:   Ctrl+C  (stops both the tunnel and the backend)
+# Stop:   Ctrl+C  (stops both the app and the tunnel)
 #
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BACKEND_DIR="$ROOT_DIR/backend"
-PORT="${PORT:-5055}"
+APP_DIR="$ROOT_DIR/frontend"
+PORT="${PORT:-3000}"
 TUNNEL_LOG="/tmp/crr_tunnel.log"
 
-# Read the verify token straight from backend/.env so it always matches.
-VERIFY_TOKEN="$(grep -E '^META_VERIFY_TOKEN=' "$BACKEND_DIR/.env" | cut -d= -f2-)"
+VERIFY_TOKEN="$(grep -E '^META_VERIFY_TOKEN=' "$APP_DIR/.env.local" | cut -d= -f2-)"
 
 cleanup() {
   echo ""
   echo "Shutting down..."
   [[ -n "${TUNNEL_PID:-}" ]] && kill "$TUNNEL_PID" 2>/dev/null || true
-  [[ -n "${BACKEND_PID:-}" ]] && kill "$BACKEND_PID" 2>/dev/null || true
+  [[ -n "${APP_PID:-}" ]] && kill "$APP_PID" 2>/dev/null || true
   exit 0
 }
 trap cleanup INT TERM
 
-# Free the port if something is already on it.
 lsof -nP -iTCP:"$PORT" -sTCP:LISTEN -t 2>/dev/null | xargs -r kill 2>/dev/null || true
 
-echo "Starting backend on http://localhost:$PORT ..."
-( cd "$BACKEND_DIR" && PORT="$PORT" npm start ) &
-BACKEND_PID=$!
+echo "Starting the app on http://localhost:$PORT ..."
+( cd "$APP_DIR" && npm run dev ) &
+APP_PID=$!
 
-# Wait for the backend to answer.
-for _ in $(seq 1 20); do
+for _ in $(seq 1 30); do
   if curl -s "http://localhost:$PORT/api/health" >/dev/null 2>&1; then break; fi
   sleep 1
 done
@@ -43,7 +40,6 @@ echo "Starting Cloudflare tunnel ..."
 cloudflared tunnel --url "http://localhost:$PORT" > "$TUNNEL_LOG" 2>&1 &
 TUNNEL_PID=$!
 
-# Wait for the public URL to appear in the tunnel log.
 PUBLIC_URL=""
 for _ in $(seq 1 30); do
   PUBLIC_URL="$(grep -Eo 'https://[a-z0-9-]+\.trycloudflare\.com' "$TUNNEL_LOG" | head -1 || true)"
@@ -62,24 +58,22 @@ cat <<EOF
   CRR is LIVE and reachable from the internet
 ============================================================
 
-  Paste these into Meta → WhatsApp → Configuration → Webhook:
+  Paste into Meta -> WhatsApp -> Configuration -> Webhook:
 
-  Callback URL:   $PUBLIC_URL/webhooks/meta
+  Callback URL:   $PUBLIC_URL/api/webhooks/meta
   Verify token:   $VERIFY_TOKEN
 
-  Then click "Verify and save" and subscribe to the
-  "messages" webhook field.
+  Then click "Verify and save" and subscribe to "messages".
 
-  Local dashboard:  http://localhost:3000
-  Public health:    $PUBLIC_URL/api/health
+  Dashboard:      http://localhost:$PORT
+  Public health:  $PUBLIC_URL/api/health
 
   NOTE: this trycloudflare.com URL changes every run.
-  Re-run this script => new URL => update it in Meta.
+  For a permanent URL, deploy to Railway (see DEPLOY.md).
 
   Press Ctrl+C to stop.
 ============================================================
 
 EOF
 
-# Keep running until interrupted.
 wait

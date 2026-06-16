@@ -1,6 +1,6 @@
 import { clearSession, getToken } from "./auth";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5055/api";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "/api";
 
 type RequestOptions = RequestInit & {
   auth?: boolean;

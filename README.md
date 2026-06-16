@@ -1,318 +1,214 @@
-# CRR — Multi-Channel Lead Matching Platform
+# CRR — WhatsApp Lead Agent (single Next.js app)
 
-CRR turns incoming WhatsApp, Instagram, and Facebook Messenger messages into
-qualified leads, automatically matches them against your listings, and replies
-to the customer — all visible from one admin dashboard.
+CRR turns incoming WhatsApp / Instagram / Facebook messages into qualified
+leads, chats with the customer like a real agent to fill in missing details,
+matches them against your listings, and keeps sending new matches on a schedule
+until they say they're done — all managed from one admin dashboard.
+
+**It's one Next.js app** — UI, API, the Meta webhook, and the follow-up
+scheduler all run together in a single project (`frontend/`).
 
 ```
 Customer DM (WhatsApp / Instagram / Facebook)
         │
         ▼
-  Meta webhook  ──►  AI extracts intent + requirements
-        │                     │
-        │                     ▼
-        │              Lead created / updated
-        │                     │
-        │            ┌────────┴────────┐
-        │            ▼                 ▼
-        │   Missing details?     Matching engine
-        │   ask a follow-up      scores Listings
-        │            │                 │
-        ▼            ▼                 ▼
-   Auto-reply sent back to the customer on the same channel
+  /api/webhooks/meta  ──►  AI (Gemini) extracts requirements
+        │                        │
+        │             missing info? → ask a follow-up question
+        │                        │
+        │                  requirements complete → matching engine
+        │                        │
+        ▼                        ▼
+  Auto-reply with matches sent back on the same channel
+        │
+   every 5 min: scheduler checks each open lead for NEW listings
+   and sends them, until the user replies "found" or "stop"
         │
         ▼
-   Admin dashboard: Leads · Inbox · Listings · Matches · Stats
+   Admin dashboard: Dashboard · Leads · Inbox · Listings · Matches · Settings
 ```
 
 ## Tech stack
 
-| Layer     | Stack                                                        |
-| --------- | ------------------------------------------------------------ |
-| Frontend  | Next.js (App Router) · React · Tailwind CSS · TypeScript     |
-| Backend   | Node.js · Express · Mongoose (MongoDB Atlas)                 |
-| Auth      | JWT (admin login), bcrypt password hashing                   |
-| Channels  | Meta Graph API adapters for WhatsApp, Instagram, Facebook    |
-| AI        | Pluggable provider: `mock` (default), `openai`, `claude`, `gemini` |
+| Layer    | Stack                                                              |
+| -------- | ----------------------------------------------------------------- |
+| App      | Next.js 16 (App Router) · React · Tailwind CSS · TypeScript        |
+| API      | Next.js Route Handlers (`src/app/api/**`)                          |
+| Data     | Mongoose · MongoDB Atlas                                           |
+| Auth     | JWT (admin login), bcrypt hashing                                  |
+| AI       | Gemini (default) · OpenAI · Claude · built-in `mock` fallback      |
+| Channels | Meta Graph API: WhatsApp, Instagram, Facebook                     |
+| Scheduler| `src/instrumentation.ts` → runs the follow-up loop on boot         |
 
 ## Project structure
 
 ```
 CRR/
-├── backend/                  Express API + webhook + matching engine
-│   └── src/
-│       ├── adapters/         Meta channel normalize/send (whatsapp, instagram, facebook)
-│       ├── config/           db + env loaders
-│       ├── controllers/      auth, admin, webhook
-│       ├── middleware/        JWT auth guard
-│       ├── models/           Mongoose schemas (Lead, Listing, Match, Conversation, …)
-│       ├── providers/        AI extraction (mock/openai/claude/gemini)
-│       ├── routes/           auth, admin, webhook routers
-│       ├── scripts/          initDb, seedAdmin, seedDemo
-│       └── services/         conversation pipeline, matching, messaging, aiAgent
-└── frontend/                 Next.js admin dashboard
-    └── src/app/              login, dashboard, leads, conversations, listings, matches, settings
+├── frontend/                    the whole app
+│   ├── src/
+│   │   ├── app/
+│   │   │   ├── api/             API routes (auth, admin/*, webhooks/*)
+│   │   │   ├── dashboard, leads, conversations, listings, matches, settings, login
+│   │   │   └── ...
+│   │   ├── components/          UI components
+│   │   ├── lib/                 client api helper + auth
+│   │   ├── server/             ← backend logic (models, services, providers,
+│   │   │   │                      adapters, utils, config, auth, http)
+│   │   │   └── scripts/         seedAdmin / seedDemo / initDb
+│   │   └── instrumentation.ts   starts the follow-up scheduler
+│   ├── railway.json             Railway deploy config
+│   └── scripts/railway-setenv.sh
+├── DEPLOY.md                    Railway deployment guide
+├── META_KEYS_SETUP.md           how to get the Meta/WhatsApp keys
+└── start-realtime.sh            local: app + public tunnel for live testing
 ```
 
 ## Prerequisites
 
-- Node.js 18+ (the adapters use the built-in `fetch`)
+- Node.js 18+
 - A MongoDB connection string (MongoDB Atlas works out of the box)
 
-## 1. Install dependencies
+## 1. Install
 
 ```bash
-cd backend
-npm install
-
-cd ../frontend
+cd frontend
 npm install
 ```
 
-## 2. Configure the backend
+## 2. Configure environment
 
-Copy the example env file and fill it in:
+Copy the example and fill it in:
 
 ```bash
-cd backend
-cp .env.example .env
+cp .env.local.example .env.local
 ```
 
-Key values in [backend/.env](backend/.env):
+Key values in [frontend/.env.local](frontend/.env.local) (server-side secrets —
+no `NEXT_PUBLIC_` prefix, so they never reach the browser):
 
 ```bash
-PORT=5000
-CLIENT_URL=http://localhost:3000
+NEXT_PUBLIC_API_URL=/api          # the app calls its own API (same origin)
 
-# MongoDB Atlas — database name is "crr"
-MONGODB_URI=mongodb+srv://<user>:<password>@<cluster-host>/crr?retryWrites=true&w=majority
-
-# Auth — change these before deploying
+MONGODB_URI=mongodb+srv://<user>:<pass>@<host>/crr?retryWrites=true&w=majority
 JWT_SECRET=change-this-long-random-secret
 ADMIN_EMAIL=admin@crr.local
 ADMIN_PASSWORD=Admin@12345
 
-# AI provider: mock works with no API key
-AI_PROVIDER=mock
+AI_PROVIDER=gemini                # or: openai | claude | mock
+GEMINI_API_KEY=your_gemini_key
+GEMINI_MODEL=gemini-2.5-flash
+
+# WhatsApp (leave blank for local mock/dry-run; see META_KEYS_SETUP.md)
+WHATSAPP_PHONE_NUMBER_ID=
+WHATSAPP_ACCESS_TOKEN=
+META_VERIFY_TOKEN=make-a-long-random-string
+META_APP_SECRET=
 ```
 
-The Meta channel keys (`WHATSAPP_*`, `INSTAGRAM_*`, `FACEBOOK_*`, `META_*`) can
-stay blank for local testing — outbound sends fall back to a logged "dry-run"
-and the simulator below lets you test the whole pipeline without them. To go
-live, follow **[META_KEYS_SETUP.md](META_KEYS_SETUP.md)**.
-
-## 3. Configure the frontend
+## 3. Seed the database (once)
 
 ```bash
-cd frontend
-cp .env.local.example .env.local
+npm run init:db      # create collections + indexes + admin user
+npm run seed:admin   # (re)create the admin user
+npm run seed:demo    # optional: sample listings + simulated leads/matches
 ```
 
-[frontend/.env.local](frontend/.env.local):
+## 4. Run (one command)
 
 ```bash
-NEXT_PUBLIC_API_URL=http://localhost:5000/api
+npm run dev          # → http://localhost:3000  (UI + API + webhook + scheduler)
 ```
 
-## 4. Initialize the database and admin user
+That's it — the whole platform runs from one process.
 
-```bash
-cd backend
-npm run init:db      # creates collections + indexes, seeds the admin user
-npm run seed:admin   # (re)create or reset the admin user only
-npm run seed:demo    # OPTIONAL: load sample listings + simulated leads/matches
-```
+## 5. Log in
 
-`seed:demo` populates the dashboard with sample listings and runs a few sample
-messages through the real pipeline, so Leads, Inbox, Matches, and Stats all show
-data on first launch.
-
-## 5. Run the apps
-
-Backend (terminal 1):
-
-```bash
-cd backend
-npm run dev      # nodemon, auto-reload  → http://localhost:5000
-# or: npm start  # plain node, for production
-```
-
-Frontend (terminal 2):
-
-```bash
-cd frontend
-npm run dev      # → http://localhost:3000
-# npm run build && npm start  # production build
-```
-
-| Service   | URL                          |
-| --------- | ---------------------------- |
-| Frontend  | http://localhost:3000        |
-| Backend   | http://localhost:5000        |
-| Health    | http://localhost:5000/api/health |
-
-## 6. Log in
-
-Open http://localhost:3000 and sign in with the seeded admin credentials
-(the login form is pre-filled with these defaults):
+Open http://localhost:3000 → redirected to the dashboard (or login):
 
 ```
 Email:    admin@crr.local
 Password: Admin@12345
 ```
 
-> These come from `ADMIN_EMAIL` / `ADMIN_PASSWORD` in `backend/.env`. Change them
-> (and re-run `npm run seed:admin`) before sharing or deploying.
+(from `ADMIN_EMAIL` / `ADMIN_PASSWORD` — change before deploying, then re-run
+`npm run seed:admin`.)
 
 ## Test the full pipeline locally (no Meta keys needed)
 
-A dev-only simulator endpoint runs a message through the exact same path as a
-real Meta webhook — AI extraction, lead creation, matching, and auto-reply:
+A dev-only simulator runs a message through the exact same path as a real Meta
+webhook (AI → lead → matching → reply):
 
 ```bash
-curl -X POST http://localhost:5000/webhooks/simulate \
+curl -X POST http://localhost:3000/api/webhooks/simulate \
   -H "Content-Type: application/json" \
-  -d '{
-    "channel": "whatsapp",
-    "contactId": "919900000001",
-    "contactName": "Test User",
-    "message": "Looking for a furnished 2bhk flat in Koramangala under 30000 immediately"
-  }'
+  -d '{"channel":"whatsapp","contactId":"test-1","message":"need a furnished 2bhk near Koramangala around 28k asap"}'
 ```
 
-Response:
+→ `{ "reply": "I found these matches: ...", "leadStatus": "Matched", "matches": 4 }`
 
-```json
-{ "reply": "I found these matches:\n1. ...", "leadStatus": "Matched", "matches": 2, "conversationId": "..." }
+## Go live on real WhatsApp (local testing)
+
+```bash
+./start-realtime.sh   # starts the app + a public Cloudflare tunnel
 ```
 
-Then refresh the dashboard to see the new conversation, lead, and matches.
-The endpoint returns `403` in production (`NODE_ENV=production`).
+It prints the **Callback URL** (`https://<tunnel>/api/webhooks/meta`) and the
+**verify token** to paste into Meta → WhatsApp → Configuration → Webhook. See
+[META_KEYS_SETUP.md](META_KEYS_SETUP.md) for getting the keys.
 
-## Backend API reference
+> The tunnel URL changes each run. For a **permanent** URL, deploy to Railway —
+> see [DEPLOY.md](DEPLOY.md).
 
-Base URL: `http://localhost:5000`
+## API reference
 
-**Public**
+Base: same origin, under `/api`.
 
-| Method | Path                 | Description                          |
-| ------ | -------------------- | ------------------------------------ |
-| GET    | `/api/health`        | Server + DB status                   |
-| GET    | `/webhooks/meta`     | Meta webhook verification handshake  |
-| POST   | `/webhooks/meta`     | Inbound messages (HMAC-verified)     |
-| POST   | `/webhooks/simulate` | Dev-only pipeline simulator          |
-| POST   | `/api/auth/login`    | Admin login → `{ token, admin }`     |
+| Method | Path                                       | Auth | Description                |
+| ------ | ------------------------------------------ | ---- | -------------------------- |
+| GET    | `/api/health`                              | —    | Server + DB status         |
+| GET    | `/api/webhooks/meta`                       | —    | Meta verification handshake|
+| POST   | `/api/webhooks/meta`                       | —    | Inbound messages (HMAC)    |
+| POST   | `/api/webhooks/simulate`                   | —    | Dev-only pipeline simulator|
+| POST   | `/api/auth/login`                          | —    | → `{ token, admin }`       |
+| GET    | `/api/auth/me`                             | ✓    | Current admin              |
+| GET    | `/api/admin/stats`                         | ✓    | Dashboard totals           |
+| GET/POST | `/api/admin/leads`                       | ✓    | List / create leads        |
+| PATCH/DELETE | `/api/admin/leads/:id`               | ✓    | Update / delete lead       |
+| GET    | `/api/admin/conversations`                 | ✓    | List conversations         |
+| GET    | `/api/admin/conversations/:id/messages`    | ✓    | Messages in a conversation |
+| GET    | `/api/admin/messages/search`               | ✓    | Full-text message search   |
+| GET/POST | `/api/admin/listings`                    | ✓    | List / create listings     |
+| PATCH/DELETE | `/api/admin/listings/:id`            | ✓    | Update / delete listing    |
+| POST   | `/api/admin/listings/match`                | ✓    | Run matching for a lead    |
+| GET    | `/api/admin/matches`                       | ✓    | List matches               |
+| GET    | `/api/admin/channels`                      | ✓    | Connected channels         |
+| GET    | `/api/admin/follow-ups`                    | ✓    | Scheduled follow-ups       |
+| PATCH  | `/api/admin/follow-ups/:id/cancel`         | ✓    | Cancel a follow-up         |
 
-**Protected** — send `Authorization: Bearer <token>`
-
-| Method | Path                                      | Description                |
-| ------ | ----------------------------------------- | -------------------------- |
-| GET    | `/api/auth/me`                            | Current admin              |
-| GET    | `/api/admin/stats`                        | Dashboard totals           |
-| GET    | `/api/admin/leads`                        | List/search/filter leads   |
-| POST   | `/api/admin/leads`                        | Create a manual lead       |
-| PATCH  | `/api/admin/leads/:id`                    | Update a lead              |
-| DELETE | `/api/admin/leads/:id`                    | Delete a lead              |
-| GET    | `/api/admin/conversations`                | List conversations         |
-| GET    | `/api/admin/conversations/:id/messages`   | Messages in a conversation |
-| GET    | `/api/admin/messages/search`              | Full-text message search   |
-| GET    | `/api/admin/listings`                     | List/search listings       |
-| POST   | `/api/admin/listings`                     | Create a listing           |
-| PATCH  | `/api/admin/listings/:id`                 | Update a listing           |
-| DELETE | `/api/admin/listings/:id`                 | Delete a listing           |
-| POST   | `/api/admin/listings/match`               | Run matching for a lead    |
-| GET    | `/api/admin/matches`                      | List matches               |
-| GET    | `/api/admin/channels`                     | List connected channels    |
-| GET    | `/api/admin/follow-ups`                   | List follow-ups (filter `?status=scheduled`) |
-| PATCH  | `/api/admin/follow-ups/:id/cancel`        | Cancel a scheduled follow-up |
-
-## Scheduled follow-ups (the core real-time loop)
-
-This is how the manager's vision works end-to-end:
-
-```
-User DMs "2bhk in Koramangala under 30k immediately"
-    │
-    ▼
-AI extracts requirements → Lead created → Listings scored
-    │
-    ├─ Matches found? → send top 3 matches, mark them "sent"
-    │                   → schedule a follow-up in 24 h
-    │
-    └─ No matches? → "I'll keep checking" → schedule a follow-up in 24 h
-
-Every 5 minutes on the server:
-    runFollowUpScheduler()
-    ├─ finds all FollowUp records with scheduledAt <= now and status=scheduled
-    ├─ for each: re-runs matching, finds listings NOT already sent to that lead
-    ├─ if new listings → sends them via the same channel (WhatsApp/Instagram/Facebook)
-    │                  → marks those matches as sent → schedules the NEXT follow-up
-    └─ if no new listings → reschedules silently (still keeps checking)
-
-User says "continue" → sends the next batch of unsent matches immediately.
-User says "found"   → closes the conversation and cancels future follow-ups.
-User says "stop"    → stops updates, cancels follow-ups.
-
-Admin adds a new listing → all active leads whose requirements match it
-                           get a near-immediate follow-up (within 1 minute).
-```
-
-The follow-up schedule, status, and history are visible in **Settings → Scheduled follow-ups** in the dashboard.
+Protected routes need `Authorization: Bearer <token>`.
 
 ## How matching works
 
-The matching engine ([backend/src/services/matching.service.js](backend/src/services/matching.service.js))
-scores each active listing against a lead's requirements (max 100):
+`src/server/services/matching.service.js` scores each active listing against a
+lead (max 100): category 20, location 25, budget fit 20, availability 10,
+keyword overlap up to 25. Top matches are saved and the best are sent in the
+reply. Tune the weights there.
 
-- Category match — 20
-- Location match — 25
-- Budget fit (within min/max) — 20
-- Availability match — 10
-- Keyword overlap — up to 25
+## Conversation flow
 
-Listings scoring `> 0` are saved as `Match` records and the top 3 are returned
-in the auto-reply. Adjust the weights in that file to tune relevance.
+The agent fills missing slots across turns (location → category → budget) and
+understands short answers ("Nellore", "20000"). Commands: **continue** (more
+options), **found** (close), **stop** (stop updates). When AI (Gemini) is
+unavailable it automatically falls back to the built-in extractor.
 
-## Going live with Meta channels
+## Deployment
 
-1. Follow **[META_KEYS_SETUP.md](META_KEYS_SETUP.md)** to create the app, tokens,
-   and verify token, and to fill in the `WHATSAPP_*` / `INSTAGRAM_*` /
-   `FACEBOOK_*` / `META_*` values.
-2. Expose the backend over HTTPS (ngrok / Cloudflare Tunnel for testing, or a
-   real domain in production) and set the webhook callback URL to:
-
-   ```
-   https://your-public-domain.com/webhooks/meta
-   ```
-
-3. Set `META_APP_SECRET` so inbound webhooks are HMAC-verified
-   (`X-Hub-Signature-256`). When this is set, unsigned/forged requests are
-   rejected with `401`.
-
-## Troubleshooting
-
-- **`EADDRINUSE` / port 5000 in use on macOS** — macOS **AirPlay Receiver**
-  listens on port 5000. Either turn it off in **System Settings → General →
-  AirDrop & Handoff → AirPlay Receiver**, or run the backend on another port and
-  point the frontend at it:
-
-  ```bash
-  # backend
-  PORT=5055 npm run dev
-  # frontend/.env.local
-  NEXT_PUBLIC_API_URL=http://localhost:5055/api
-  ```
-
-- **`MONGODB_URI or ATLAS_URI is missing`** — copy `.env.example` to `.env` and
-  set the connection string.
-- **Login fails / no admin** — run `npm run seed:admin` in `backend`.
-- **Dashboard is empty** — run `npm run seed:demo`, or send a message through
-  the simulator.
+See **[DEPLOY.md](DEPLOY.md)** — single Railway service, fixed webhook URL,
+always-on scheduler.
 
 ## Security notes
 
-- Never commit a real `.env` — both are git-ignored.
-- Rotate any DB password or Meta/AI token that has been shared in chat,
-  screenshots, or tickets.
-- Use a long random `JWT_SECRET` and strong admin password in production.
-- Always serve webhooks over HTTPS and set `META_APP_SECRET`.
+- `.env.local` is git-ignored — never commit real secrets.
+- Rotate any token/password shared in chat or screenshots.
+- Use a long random `JWT_SECRET`, a real `ADMIN_PASSWORD`, and set
+  `META_APP_SECRET` in production.
