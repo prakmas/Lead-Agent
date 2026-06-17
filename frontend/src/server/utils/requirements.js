@@ -147,12 +147,17 @@ export const applyPendingAnswer = (awaitingField, rawMessage, requirements = {})
     requirements.category = cat;
   }
 
-  // 2. Budget number? handle "12000", "12,000", "20k".
-  if (!requirements.budgetMax) {
+  // 2. Budget number? handle "12000", "12,000", "20k". But NOT while we're
+  //    collecting a location (a number there is a pincode, not a budget), and
+  //    only accept sane rent amounts (3–6 digits, ≤ 10 lakh) so a mistyped
+  //    pincode like "5242001" never becomes a ₹52,42,001 budget.
+  if (!requirements.budgetMax && awaitingField !== "location") {
     const k = lower.match(/(\d+(?:\.\d+)?)\s*k\b/);
-    const n = lower.replace(/,/g, "").match(/\d{3,7}/);
-    if (k) requirements.budgetMax = Math.round(parseFloat(k[1]) * 1000);
-    else if (n) requirements.budgetMax = Number(n[0]);
+    const n = lower.replace(/,/g, "").match(/\b\d{3,6}\b/);
+    let b;
+    if (k) b = Math.round(parseFloat(k[1]) * 1000);
+    else if (n) b = Number(n[0]);
+    if (b && b >= 500 && b <= 1000000) requirements.budgetMax = b;
   }
 
   // 3. Location? Only if the reply is a plain place word (not a category/number).
