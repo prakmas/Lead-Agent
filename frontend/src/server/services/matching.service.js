@@ -133,7 +133,7 @@ export const findMatchesForLead = async (lead, limit = 5) => {
         status: "suggested",
       },
       { new: true, upsert: true, setDefaultsOnInsert: true },
-    ).populate("listing");
+    ).populate({ path: "listing", select: "-images" });
 
     matches.push(match);
   }

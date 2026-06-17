@@ -11,6 +11,19 @@ const listingSchema = new mongoose.Schema(
     availability: { type: String, trim: true },
     preferences: [{ type: String, trim: true }],
     keywords: [{ type: String, trim: true }],
+    // Photos (data URLs). First entry is the cover. coverThumb is a small version
+    // returned in list views so the inventory list stays lightweight.
+    images: [{ type: String }],
+    coverThumb: { type: String },
+    // Exact map location.
+    geo: {
+      lat: Number,
+      lng: Number,
+      address: { type: String, trim: true },
+    },
+    // Contact shared with the customer on WhatsApp for this listing.
+    contactName: { type: String, trim: true },
+    contactPhone: { type: String, trim: true },
     contactInfo: { type: mongoose.Schema.Types.Mixed, default: {} },
     status: {
       type: String,

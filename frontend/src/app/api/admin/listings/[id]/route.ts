@@ -7,6 +7,15 @@ export const dynamic = "force-dynamic";
 
 type Ctx = { params: Promise<{ id: string }> };
 
+// Full detail incl. images — used when opening a listing to edit.
+export const GET = route(async (request: Request, ctx: Ctx) => {
+  await requireAuth(request);
+  const { id } = await ctx.params;
+  const listing = await Listing.findById(id);
+  if (!listing) throw createHttpError(404, "Listing not found");
+  return json(listing);
+});
+
 export const PATCH = route(async (request: Request, ctx: Ctx) => {
   await requireAuth(request);
   const { id } = await ctx.params;

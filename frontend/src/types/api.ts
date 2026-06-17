@@ -89,6 +89,12 @@ export type Listing = {
   availability?: string;
   preferences?: string[];
   keywords?: string[];
+  images?: string[];
+  coverThumb?: string;
+  geo?: { lat?: number; lng?: number; address?: string };
+  contactName?: string;
+  contactPhone?: string;
+  metadata?: { country?: string; state?: string; city?: string; area?: string; pincode?: string };
   status: string;
   createdAt: string;
 };

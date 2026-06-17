@@ -15,7 +15,8 @@ export const GET = route(async (request: Request) => {
   if (options.search) query.$text = { $search: options.search };
 
   const result = await paginate(
-    Listing.find(query).sort({ createdAt: -1 }),
+    // Exclude the heavy full-size images from the list (keep the small thumb).
+    Listing.find(query).select("-images").sort({ createdAt: -1 }),
     Listing.countDocuments(query),
     options,
   );
