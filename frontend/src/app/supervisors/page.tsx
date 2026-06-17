@@ -6,7 +6,7 @@ import { AppShell } from "@/components/AppShell";
 import { PageHeader } from "@/components/PageHeader";
 import { PermissionMatrix } from "@/components/PermissionMatrix";
 import { TerritoryEditor } from "@/components/TerritoryEditor";
-import { PageLoader } from "@/components/Loader";
+import { PageLoader, Spinner } from "@/components/Loader";
 import { supervisorService } from "@/lib/api";
 import { accessStyles, emptyPermissions, MODULES } from "@/lib/modules";
 import type { ModuleAccess, Supervisor, Territory } from "@/types/api";
@@ -26,6 +26,7 @@ export default function SupervisorsPage() {
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
   const [revealPw, setRevealPw] = useState<Record<string, boolean>>({});
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   // Create
   const [showCreate, setShowCreate] = useState(false);
@@ -93,24 +94,33 @@ export default function SupervisorsPage() {
     }
   };
 
+  // Update just one card in place (no full-page reload).
+  const replaceOne = (u: Supervisor) => setSupervisors((prev) => prev.map((s) => (s._id === u._id ? u : s)));
+
   const approve = async (s: Supervisor) => {
+    setBusyId(s._id);
     try {
-      await supervisorService.approve(s._id);
-      await load();
+      const res = await supervisorService.approve(s._id);
+      replaceOne(res.data);
       flash(`${s.name} approved`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to approve");
+    } finally {
+      setBusyId(null);
     }
   };
 
   const reject = async (s: Supervisor) => {
     if (!confirm(`Reject ${s.name}'s signup? They won't be able to log in.`)) return;
+    setBusyId(s._id);
     try {
-      await supervisorService.reject(s._id);
-      await load();
+      const res = await supervisorService.reject(s._id);
+      replaceOne(res.data);
       flash(`${s.name} rejected`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to reject");
+    } finally {
+      setBusyId(null);
     }
   };
 
@@ -118,9 +128,9 @@ export default function SupervisorsPage() {
     if (!editing) return;
     setSaving(true);
     try {
-      await supervisorService.setPermissions(editing._id, editPerms);
+      const res = await supervisorService.setPermissions(editing._id, editPerms);
+      replaceOne(res.data);
       setEditing(null);
-      await load();
       flash("Access updated");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to update access");
@@ -133,9 +143,9 @@ export default function SupervisorsPage() {
     if (!terrTarget) return;
     setSaving(true);
     try {
-      await supervisorService.setTerritories(terrTarget._id, terrValue);
+      const res = await supervisorService.setTerritories(terrTarget._id, terrValue);
+      replaceOne(res.data);
       setTerrTarget(null);
-      await load();
       flash("Territory updated");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to update territory");
@@ -145,23 +155,29 @@ export default function SupervisorsPage() {
   };
 
   const toggleActive = async (s: Supervisor) => {
+    setBusyId(s._id);
     try {
-      await supervisorService.setActive(s._id, !s.isActive);
-      await load();
+      const res = await supervisorService.setActive(s._id, !s.isActive);
+      replaceOne(res.data);
       flash(s.isActive ? "Supervisor deactivated" : "Supervisor activated");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to update");
+    } finally {
+      setBusyId(null);
     }
   };
 
   const revoke = async (s: Supervisor) => {
     if (!confirm(`Revoke ${s.name}'s account? This permanently deletes their login.`)) return;
+    setBusyId(s._id);
     try {
       await supervisorService.revoke(s._id);
-      await load();
+      setSupervisors((prev) => prev.filter((x) => x._id !== s._id));
       flash("Supervisor revoked");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to revoke");
+    } finally {
+      setBusyId(null);
     }
   };
 
@@ -173,7 +189,11 @@ export default function SupervisorsPage() {
     }
     setSaving(true);
     try {
-      await supervisorService.setPassword(pwTarget._id, newPassword);
+      const id = pwTarget._id;
+      await supervisorService.setPassword(id, newPassword);
+      // Update that card's viewable password immediately and reveal it.
+      setSupervisors((prev) => prev.map((s) => (s._id === id ? { ...s, viewPassword: newPassword } : s)));
+      setRevealPw((p) => ({ ...p, [id]: true }));
       setPwTarget(null);
       setNewPassword("");
       flash("Password updated");
@@ -223,7 +243,12 @@ export default function SupervisorsPage() {
           </div>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {pendingList.map((s) => (
-              <div key={s._id} className="rounded-lg border border-amber-200 bg-white p-3">
+              <div key={s._id} className="relative rounded-lg border border-amber-200 bg-white p-3">
+                {busyId === s._id ? (
+                  <div className="absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-white/70">
+                    <Spinner size={20} className="text-amber-600" />
+                  </div>
+                ) : null}
                 <p className="text-sm font-semibold text-slate-950">{s.name}</p>
                 <div className="mt-1 space-y-0.5 text-xs text-slate-500">
                   {s.phone ? <p>📞 {s.phone}</p> : null}
@@ -264,7 +289,12 @@ export default function SupervisorsPage() {
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {approvedList.map((s) => (
-            <div key={s._id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div key={s._id} className="relative rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              {busyId === s._id ? (
+                <div className="absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-white/70">
+                  <Spinner size={22} className="text-teal-600" />
+                </div>
+              ) : null}
               <div className="flex items-start gap-3">
                 <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-sm font-bold ${s.isActive ? "bg-teal-100 text-teal-700" : "bg-slate-100 text-slate-400"}`}>
                   {initials(s.name)}
