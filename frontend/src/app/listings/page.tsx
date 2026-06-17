@@ -303,19 +303,18 @@ export default function ListingsPage() {
       .catch(() => {});
   }, [isOwner]);
 
-  // When a location is selected, only show supervisors who cover it (territory
-  // value matches the chosen state / district / pincode).
-  const locActive = geoFilter.state || geoFilter.district || geoFilter.pincodes.length > 0;
-  const shownSupervisors = locActive
-    ? supervisors.filter((s) =>
-        (s.territories || []).some(
-          (t) =>
-            (t.level === "state" && t.value === geoFilter.state) ||
-            (t.level === "city" && t.value === geoFilter.district) ||
-            (t.level === "pincode" && geoFilter.pincodes.includes(t.value)),
-        ),
-      )
-    : supervisors;
+  // Supervisor badges appear ONLY after a pincode is selected, and show the
+  // supervisors who cover it (matched by pincode, or by the district/state the
+  // pincode sits in — from the cascade context).
+  const showSupervisorBadges = isOwner && geoFilter.pincodes.length > 0;
+  const shownSupervisors = supervisors.filter((s) =>
+    (s.territories || []).some(
+      (t) =>
+        (t.level === "pincode" && geoFilter.pincodes.includes(t.value)) ||
+        (t.level === "city" && t.value === geoFilter.district) ||
+        (t.level === "state" && t.value === geoFilter.state),
+    ),
+  );
 
   useEffect(() => {
     loadListings().catch((err) => setError(err.message));
@@ -492,12 +491,14 @@ export default function ListingsPage() {
             {/* Cascading location filters: state → district → area + pincode */}
             <ListingFilters value={geoFilter} onChange={setGeoFilter} />
 
-            {/* Supervisor badges — contextual to the selected area (owner only) */}
-            {isOwner && supervisors.length > 0 ? (
-              shownSupervisors.length === 0 ? (
-                <p className="text-[11px] italic text-slate-400">No supervisor covers the selected area.</p>
-              ) : (
-                <div className="flex flex-wrap items-center gap-1.5">
+            {/* Supervisor badges — only after a pincode is selected (owner only) */}
+            {showSupervisorBadges ? (
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-[11px] font-semibold text-slate-500">Supervisors:</span>
+                {shownSupervisors.length === 0 ? (
+                  <span className="text-[11px] italic text-slate-400">No supervisor covers this pincode.</span>
+                ) : (
+                  <>
                   <button
                     type="button"
                     onClick={() => setCreatorFilter("")}
@@ -527,8 +528,9 @@ export default function ListingsPage() {
                       </button>
                     );
                   })}
-                </div>
-              )
+                  </>
+                )}
+              </div>
             ) : null}
           </div>
 
