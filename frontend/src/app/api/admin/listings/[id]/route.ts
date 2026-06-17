@@ -31,7 +31,7 @@ const ensureCanManage = (admin: Admin, listing: WithCreator) => {
 export const GET = route(async (request: Request, ctx: Ctx) => {
   const admin = (await requireApiAccess(request)) as Admin;
   const { id } = await ctx.params;
-  const listing = await Listing.findById(id).populate({ path: "createdBy", select: "name email" });
+  const listing = await Listing.findById(id).populate({ path: "createdBy", select: "name email role" });
   if (!listing) throw createHttpError(404, "Listing not found");
   ensureCanView(admin, listing as WithCreator);
   return json(listing);

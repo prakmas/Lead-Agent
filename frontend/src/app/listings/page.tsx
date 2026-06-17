@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertCircle, CheckCircle, ImageOff, Lock, Pencil, Plus, RefreshCw, Trash2, UserRound, X } from "lucide-react";
+import { AlertCircle, CheckCircle, ImageOff, Lock, Pencil, Plus, RefreshCw, Shield, Trash2, UserRound, X } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { CategorySelect, type CategoryGroup } from "@/components/CategorySelect";
@@ -267,8 +267,6 @@ export default function ListingsPage() {
   const isOwner = me?.role === "owner" || me?.role === "admin";
   const creatorId = (l: Listing) =>
     typeof l.createdBy === "object" && l.createdBy ? l.createdBy._id : (l.createdBy as string | undefined);
-  const creatorName = (l: Listing) =>
-    typeof l.createdBy === "object" && l.createdBy ? l.createdBy.name || l.createdBy.email : null;
   // A supervisor may only edit/delete listings they created; the owner edits all.
   const canManage = (l: Listing) => isOwner || (!!me && creatorId(l) === me.id);
 
@@ -581,11 +579,19 @@ export default function ListingsPage() {
                       {listing.budget ? <span>₹{listing.budget.toLocaleString()}</span> : null}
                       {listing.contactPhone ? <span>📞 {listing.contactPhone}</span> : null}
                       {listing.geo?.lat ? <span className="text-teal-600">📍 pinned</span> : null}
-                      {creatorName(listing) ? (
-                        <span className="inline-flex items-center gap-1 text-slate-400">
-                          <UserRound size={11} /> {creatorName(listing)}
-                        </span>
-                      ) : null}
+                      {(() => {
+                        const c = typeof listing.createdBy === "object" ? listing.createdBy : null;
+                        const adminMade = !c || c.role === "owner" || c.role === "admin";
+                        return adminMade ? (
+                          <span className="inline-flex items-center gap-1 rounded bg-slate-900 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                            <Shield size={10} /> Admin
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-bold text-indigo-700">
+                            <UserRound size={10} /> {c.name || c.email}
+                          </span>
+                        );
+                      })()}
                     </div>
                   </div>
                 </article>

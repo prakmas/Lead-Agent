@@ -62,7 +62,7 @@ export const GET = route(async (request: Request) => {
     // Populate the creator so the UI can show "listed by …" and gate editing.
     Listing.find(query)
       .select("-images")
-      .populate({ path: "createdBy", select: "name email" })
+      .populate({ path: "createdBy", select: "name email role" })
       .sort({ createdAt: -1 }),
     Listing.countDocuments(query),
     options,
