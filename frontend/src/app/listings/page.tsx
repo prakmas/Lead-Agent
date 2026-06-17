@@ -237,6 +237,31 @@ const BADGE_ACTIVE = [
   "bg-teal-600 text-white ring-teal-600",
 ];
 
+// Pull lat/lng out of a pasted Google Maps URL if present (@lat,lng / ?q=lat,lng
+// / !3dlat!4dlng). Returns null when the link has no coordinates.
+const parseMapLink = (url?: string): { lat: number; lng: number } | null => {
+  if (!url) return null;
+  const at = url.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
+  if (at) return { lat: Number(at[1]), lng: Number(at[2]) };
+  const q = url.match(/[?&](?:q|ll|query|destination)=(-?\d+\.\d+),(-?\d+\.\d+)/);
+  if (q) return { lat: Number(q[1]), lng: Number(q[2]) };
+  const d = url.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/);
+  if (d) return { lat: Number(d[1]), lng: Number(d[2]) };
+  return null;
+};
+
+// Geocode a free-text place (address / area / pincode) via OpenStreetMap.
+const geocodePlace = async (query: string): Promise<GeoValue | null> => {
+  try {
+    const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(query)}`);
+    const d = await r.json();
+    if (d?.[0]) return { lat: Number(d[0].lat), lng: Number(d[0].lon), address: d[0].display_name };
+  } catch {
+    /* ignore */
+  }
+  return null;
+};
+
 const EMPTY_FORM = {
   title: "",
   category: "flat",
@@ -360,11 +385,28 @@ export default function ListingsPage() {
         area: l.metadata?.area,
         pincode: l.metadata?.pincode,
       });
-      setGeo(l.geo || {});
       setImages(l.images || []);
       // Editing doesn't require re-OTP; treat an already-verified listing as ok.
       setOtp({ sent: false, code: "", verified: !!l.phoneVerified, dev: "", busy: false });
       window.scrollTo({ top: 0, behavior: "smooth" });
+
+      // Center the map on this listing: saved pin → coords in the map link →
+      // geocode the address/area/pincode.
+      if (l.geo?.lat && l.geo?.lng) {
+        setGeo(l.geo);
+      } else {
+        const fromLink = parseMapLink(l.mapLink);
+        if (fromLink) {
+          setGeo({ ...fromLink, address: l.address });
+        } else {
+          setGeo({});
+          const q = [l.address, l.metadata?.area, l.metadata?.city, l.metadata?.pincode, "India"].filter(Boolean).join(", ");
+          if (q.length > 5) {
+            const geo = await geocodePlace(q);
+            if (geo) setGeo(geo);
+          }
+        }
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load listing");
     }
@@ -641,7 +683,13 @@ export default function ListingsPage() {
           ) : (
             <div className="max-h-[calc(100vh-15rem)] divide-y divide-slate-100 overflow-y-auto">
               {listings.map((listing) => (
-                <article key={listing._id} className="flex gap-3 px-4 py-4">
+                <article
+                  key={listing._id}
+                  onClick={() => canManage(listing) && startEdit(listing._id).catch((err) => setError(err.message))}
+                  className={`flex gap-3 px-4 py-4 transition ${
+                    editingId === listing._id ? "bg-teal-50/60" : ""
+                  } ${canManage(listing) ? "cursor-pointer hover:bg-slate-50" : ""}`}
+                >
                   {/* cover thumb */}
                   <div className="h-16 w-16 shrink-0 overflow-hidden rounded-md border border-slate-200 bg-slate-50">
                     {listing.coverThumb ? (
@@ -657,7 +705,7 @@ export default function ListingsPage() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-start justify-between gap-2">
                       <h3 className="truncate font-semibold text-slate-950">{listing.title}</h3>
-                      <div className="flex shrink-0 items-center gap-1.5">
+                      <div className="flex shrink-0 items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
                         {canManage(listing) ? (
                           <>
                             <button type="button" onClick={() => startEdit(listing._id).catch((err) => setError(err.message))} title="Edit" className="text-slate-400 hover:text-teal-700">
@@ -698,7 +746,7 @@ export default function ListingsPage() {
                         {listing.landmark ? <p>📌 {listing.landmark}</p> : null}
                         {listing.timings ? <p>🕒 {listing.timings}</p> : null}
                         {listing.mapLink ? (
-                          <a href={listing.mapLink} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-teal-600 hover:underline">
+                          <a href={listing.mapLink} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="inline-flex items-center gap-1 text-teal-600 hover:underline">
                             🗺️ Google Maps
                           </a>
                         ) : null}
