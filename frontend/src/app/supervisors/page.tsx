@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { PageHeader } from "@/components/PageHeader";
 import { PermissionMatrix } from "@/components/PermissionMatrix";
+import { PageLoader } from "@/components/Loader";
 import { supervisorService } from "@/lib/api";
 import { accessStyles, emptyPermissions, MODULES } from "@/lib/modules";
 import type { ModuleAccess, Supervisor } from "@/types/api";
@@ -16,6 +17,7 @@ export default function SupervisorsPage() {
   const [supervisors, setSupervisors] = useState<Supervisor[]>([]);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [loading, setLoading] = useState(true);
 
   // Create
   const [showCreate, setShowCreate] = useState(false);
@@ -42,7 +44,9 @@ export default function SupervisorsPage() {
   }, []);
 
   useEffect(() => {
-    load().catch((e) => setError(e.message));
+    load()
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
   }, [load]);
 
   const create = async () => {
@@ -146,7 +150,9 @@ export default function SupervisorsPage() {
         </div>
       ) : null}
 
-      {supervisors.length === 0 ? (
+      {loading ? (
+        <PageLoader label="Loading supervisors…" />
+      ) : supervisors.length === 0 ? (
         <div className="rounded-lg border border-dashed border-slate-300 bg-white p-10 text-center">
           <ShieldCheck className="mx-auto text-slate-300" size={36} />
           <p className="mt-3 text-sm font-medium text-slate-600">No supervisors yet</p>

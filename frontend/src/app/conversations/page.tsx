@@ -5,6 +5,7 @@ import {
   Bot,
   CheckCheck,
   Info,
+  MailQuestion,
   MapPin,
   Phone,
   RefreshCw,
@@ -20,6 +21,7 @@ import { AppShell } from "@/components/AppShell";
 import { ChannelBadge } from "@/components/ChannelBadge";
 import { PageHeader } from "@/components/PageHeader";
 import { TagPicker } from "@/components/TagPicker";
+import { Spinner } from "@/components/Loader";
 import { contactService, conversationService, matchService } from "@/lib/api";
 import type { Conversation, Match, Message } from "@/types/api";
 
@@ -71,6 +73,7 @@ export default function ConversationsPage() {
   const [statusFilter, setStatusFilter] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [loadingList, setLoadingList] = useState(true);
 
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
@@ -97,7 +100,9 @@ export default function ConversationsPage() {
   }, [statusFilter]);
 
   useEffect(() => {
-    loadConversations().catch((err) => setError(err.message));
+    loadConversations()
+      .catch((err) => setError(err.message))
+      .finally(() => setLoadingList(false));
   }, [loadConversations]);
 
   // Open a specific conversation when arriving from a notification (?c=<id>).
@@ -137,9 +142,13 @@ export default function ConversationsPage() {
     setEditPhone(selected.contact?.phone || "");
     setEditNotes(selected.contact?.profile?.notes || "");
     setEditTags(selected.contact?.tags || []);
-    // Clear unread on open.
+    // Clear unread on open — optimistically update the list, persist, and tell
+    // the header bell to refresh immediately (instead of waiting for its poll).
     if (selected.unreadCount > 0) {
-      conversationService.markRead(selected._id).catch(() => {});
+      const id = selected._id;
+      setConversations((prev) => prev.map((c) => (c._id === id ? { ...c, unreadCount: 0 } : c)));
+      conversationService.markRead(id).catch(() => {});
+      if (typeof window !== "undefined") window.dispatchEvent(new Event("crr:conversations-changed"));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
@@ -204,6 +213,15 @@ export default function ConversationsPage() {
     } catch (err) {
       setError((err as Error).message);
     }
+  };
+
+  const markUnread = async () => {
+    if (!selected) return;
+    const id = selected._id;
+    setConversations((prev) => prev.map((c) => (c._id === id ? { ...c, unreadCount: Math.max(1, c.unreadCount || 0) } : c)));
+    conversationService.markUnread(id).catch(() => {});
+    if (typeof window !== "undefined") window.dispatchEvent(new Event("crr:conversations-changed"));
+    flash("Marked as unread");
   };
 
   const saveContact = async () => {
@@ -295,7 +313,9 @@ export default function ConversationsPage() {
           </div>
 
           <div className="max-h-[55vh] min-h-0 flex-1 divide-y divide-slate-100 overflow-y-auto lg:max-h-none">
-            {filtered.length === 0 ? (
+            {loadingList ? (
+              <div className="flex justify-center py-10"><Spinner size={22} className="text-teal-600" /></div>
+            ) : filtered.length === 0 ? (
               <p className="p-6 text-center text-sm text-slate-400">No conversations</p>
             ) : null}
             {filtered.map((c) => {
@@ -371,6 +391,14 @@ export default function ConversationsPage() {
                 </div>
 
                 <div className="ml-auto flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={markUnread}
+                    title="Mark this chat as unread"
+                    className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 px-2.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                  >
+                    <MailQuestion size={14} /> Unread
+                  </button>
                   <select
                     value={selected.status}
                     onChange={(e) => changeStatus(e.target.value).catch(() => {})}

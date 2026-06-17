@@ -83,6 +83,7 @@ export const conversationService = {
   update: (id: string, payload: Record<string, unknown>) =>
     http.patch<{ data: Conversation }>(endpoints.admin.conversation(id), payload),
   markRead: (id: string) => http.patch<{ data: Conversation }>(endpoints.admin.conversation(id), { markRead: true }),
+  markUnread: (id: string) => http.patch<{ data: Conversation }>(endpoints.admin.conversation(id), { markUnread: true }),
   setBot: (id: string, botEnabled: boolean) =>
     http.patch<{ data: Conversation }>(endpoints.admin.conversation(id), { botEnabled }),
   setStatus: (id: string, status: string) =>

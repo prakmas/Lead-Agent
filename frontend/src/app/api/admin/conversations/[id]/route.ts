@@ -27,6 +27,9 @@ export const PATCH = route(async (request: Request, ctx: Ctx) => {
   if (body.markRead === true) {
     conversation.unreadCount = 0;
   }
+  if (body.markUnread === true) {
+    conversation.unreadCount = Math.max(1, conversation.unreadCount || 0);
+  }
 
   await conversation.save();
   const populated = await Conversation.findById(id)

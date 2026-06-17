@@ -5,6 +5,7 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { CategorySelect, type CategoryGroup } from "@/components/CategorySelect";
 import { ImageUploader } from "@/components/ImageUploader";
+import { PageLoader } from "@/components/Loader";
 import { LocationPicker, type LocationValue } from "@/components/LocationPicker";
 import { MapPicker, type GeoValue } from "@/components/MapPicker";
 import { PageHeader } from "@/components/PageHeader";
@@ -232,10 +233,16 @@ export default function ListingsPage() {
   const [geo, setGeo] = useState<GeoValue>({});
   const [images, setImages] = useState<string[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [loadingList, setLoadingList] = useState(true);
 
   const loadListings = useCallback(async () => {
-    const result = await listingService.list();
-    setListings(result.data);
+    setLoadingList(true);
+    try {
+      const result = await listingService.list();
+      setListings(result.data);
+    } finally {
+      setLoadingList(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -409,7 +416,9 @@ export default function ListingsPage() {
             </button>
           </div>
 
-          {listings.length === 0 ? (
+          {loadingList ? (
+            <PageLoader label="Loading listings…" />
+          ) : listings.length === 0 ? (
             <p className="px-4 py-6 text-sm text-slate-500">No listings yet — create one.</p>
           ) : (
             <div className="divide-y divide-slate-100">

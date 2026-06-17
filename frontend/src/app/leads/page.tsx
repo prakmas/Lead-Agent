@@ -5,6 +5,7 @@ import { ChangeEvent, useCallback, useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { ChannelBadge } from "@/components/ChannelBadge";
 import { FollowUpControl } from "@/components/FollowUpControl";
+import { PageLoader } from "@/components/Loader";
 import { PageHeader } from "@/components/PageHeader";
 import { StatusBadge } from "@/components/StatusBadge";
 import { leadService } from "@/lib/api";
@@ -18,10 +19,16 @@ export default function LeadsPage() {
   const [status, setStatus] = useState("");
   const [followUp, setFollowUp] = useState(""); // "" | "active"
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
 
   const loadLeads = useCallback(async () => {
-    const result = await leadService.list({ search, status, followUp: followUp || undefined });
-    setLeads(result.data);
+    setLoading(true);
+    try {
+      const result = await leadService.list({ search, status, followUp: followUp || undefined });
+      setLeads(result.data);
+    } finally {
+      setLoading(false);
+    }
   }, [search, status, followUp]);
 
   useEffect(() => {
@@ -34,6 +41,9 @@ export default function LeadsPage() {
       })
       .catch((err) => {
         if (isMounted) setError(err.message);
+      })
+      .finally(() => {
+        if (isMounted) setLoading(false);
       });
 
     return () => {
@@ -110,6 +120,11 @@ export default function LeadsPage() {
 
       {error ? <div className="mb-4 rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</div> : null}
 
+      {loading ? (
+        <div className="rounded-lg border border-slate-200 bg-white shadow-sm">
+          <PageLoader label="Loading leads…" />
+        </div>
+      ) : (
       <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-slate-200 text-sm">
@@ -164,6 +179,7 @@ export default function LeadsPage() {
           </table>
         </div>
       </div>
+      )}
     </AppShell>
   );
 }

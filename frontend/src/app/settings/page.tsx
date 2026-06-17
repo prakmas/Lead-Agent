@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { ChannelBadge } from "@/components/ChannelBadge";
 import { PageHeader } from "@/components/PageHeader";
+import { Spinner } from "@/components/Loader";
 import { apiUrl, channelService, followUpService } from "@/lib/api";
 import type { Channel, FollowUp } from "@/types/api";
 
@@ -14,6 +15,7 @@ export default function SettingsPage() {
   const [followUpTotal, setFollowUpTotal] = useState(0);
   const [fuStatus, setFuStatus] = useState("scheduled");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
 
   const loadChannels = () =>
     channelService
@@ -31,8 +33,7 @@ export default function SettingsPage() {
       .catch((err) => setError(err.message));
 
   useEffect(() => {
-    loadChannels();
-    loadFollowUps(fuStatus);
+    Promise.all([loadChannels(), loadFollowUps(fuStatus)]).finally(() => setLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -96,7 +97,9 @@ export default function SettingsPage() {
         <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
           <h2 className="text-sm font-semibold text-slate-950">Connected channels</h2>
           <div className="mt-4 space-y-3">
-            {channels.length === 0 ? (
+            {loading ? (
+              <div className="flex justify-center py-6"><Spinner size={20} className="text-teal-600" /></div>
+            ) : channels.length === 0 ? (
               <p className="text-sm text-slate-500">
                 Channels appear after the first webhook message arrives (or after running{" "}
                 <code className="rounded bg-slate-100 px-1 text-xs">npm run seed:demo</code>).
@@ -145,7 +148,9 @@ export default function SettingsPage() {
           </select>
         </div>
 
-        {followUps.length === 0 ? (
+        {loading ? (
+          <div className="flex justify-center py-8"><Spinner size={20} className="text-teal-600" /></div>
+        ) : followUps.length === 0 ? (
           <p className="px-4 py-6 text-sm text-slate-500">
             {fuStatus === "scheduled"
               ? "No follow-ups scheduled. They are created automatically when a lead is matched."

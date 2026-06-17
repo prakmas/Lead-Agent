@@ -7,7 +7,7 @@ import { conversationService } from "@/lib/api";
 import { getToken } from "@/lib/auth";
 import type { Conversation } from "@/types/api";
 
-const POLL_MS = 12_000;
+const POLL_MS = 8_000;
 
 const nameOf = (c: Conversation) =>
   c.contact?.name || c.contact?.phone || c.contact?.externalId || "Unknown";
@@ -76,9 +76,13 @@ export function NotificationBell() {
     }
     const first = setTimeout(refresh, 0);
     const poll = setInterval(refresh, POLL_MS);
+    // Refresh instantly when a conversation is read/unread elsewhere in the app.
+    const onChanged = () => refresh();
+    window.addEventListener("crr:conversations-changed", onChanged);
     return () => {
       clearTimeout(first);
       clearInterval(poll);
+      window.removeEventListener("crr:conversations-changed", onChanged);
     };
   }, [refresh]);
 

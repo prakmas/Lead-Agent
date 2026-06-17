@@ -6,6 +6,7 @@ import { AppShell } from "@/components/AppShell";
 import { ChannelBadge } from "@/components/ChannelBadge";
 import { PageHeader } from "@/components/PageHeader";
 import { StatTile } from "@/components/StatTile";
+import { PageLoader } from "@/components/Loader";
 import { statsService } from "@/lib/api";
 
 type Stats = {
@@ -23,12 +24,14 @@ type Stats = {
 export default function DashboardPage() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     statsService
       .get<Stats>()
       .then(setStats)
-      .catch((err) => setError(err.message));
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false));
   }, []);
 
   return (
@@ -40,6 +43,10 @@ export default function DashboardPage() {
 
       {error ? <div className="mb-4 rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</div> : null}
 
+      {loading ? (
+        <PageLoader label="Loading dashboard…" />
+      ) : (
+      <>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatTile label="Leads" value={stats?.totals.leads ?? "-"} icon={Users} />
         <StatTile label="Open conversations" value={stats?.totals.conversations ?? "-"} icon={Inbox} />
@@ -84,6 +91,8 @@ export default function DashboardPage() {
           </div>
         </section>
       </div>
+      </>
+      )}
     </AppShell>
   );
 }
