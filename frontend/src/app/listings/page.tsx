@@ -11,16 +11,177 @@ import { api } from "@/lib/api";
 import { dataUrlToThumb } from "@/lib/image";
 import type { Listing, Paginated } from "@/types/api";
 
-const CATEGORIES = [
-  ["flat", "Flat / Apartment"],
-  ["pg", "PG / Hostel"],
-  ["room", "Single Room"],
-  ["roommate", "Roommate / Sharing"],
-  ["house", "House / Villa"],
-  ["hotel", "Hotel / Short stay"],
-  ["supermarket", "Supermarket / Grocery"],
-  ["rental", "Commercial / Office"],
-  ["service", "Home Service"],
+// A broad, real-world catalogue of categories grouped for an easy dropdown.
+// `value` is a stable lowercase slug stored on the listing; `label` is shown.
+const CATEGORY_GROUPS: [string, [string, string][]][] = [
+  ["Housing & Stay", [
+    ["flat", "Flat / Apartment"],
+    ["pg", "PG / Hostel"],
+    ["room", "Single Room"],
+    ["roommate", "Roommate / Sharing"],
+    ["house", "House / Villa"],
+    ["hotel", "Hotel / Short stay"],
+    ["guesthouse", "Guest House / Homestay"],
+    ["resort", "Resort"],
+    ["farmhouse", "Farmhouse"],
+    ["servicedapartment", "Serviced Apartment"],
+  ]],
+  ["Property & Real Estate", [
+    ["plot", "Plot / Land"],
+    ["commercial", "Commercial Space"],
+    ["office", "Office Space"],
+    ["coworking", "Coworking Space"],
+    ["shop", "Shop / Showroom"],
+    ["warehouse", "Warehouse / Godown"],
+    ["rental", "Other Rental"],
+    ["realestateagent", "Real Estate Agent"],
+  ]],
+  ["Home Services", [
+    ["cleaning", "Home Cleaning"],
+    ["deepcleaning", "Deep Cleaning"],
+    ["pestcontrol", "Pest Control"],
+    ["plumber", "Plumber"],
+    ["electrician", "Electrician"],
+    ["carpenter", "Carpenter"],
+    ["painter", "Painting"],
+    ["acrepair", "AC Repair & Service"],
+    ["appliancerepair", "Appliance Repair"],
+    ["waterpurifier", "Water Purifier Service"],
+    ["gardening", "Gardening / Landscaping"],
+    ["interiordesign", "Interior Design"],
+    ["renovation", "Home Renovation"],
+    ["cctv", "CCTV / Security Install"],
+    ["packersmovers", "Packers & Movers"],
+    ["welding", "Welding / Fabrication"],
+    ["roofing", "Roofing / Waterproofing"],
+  ]],
+  ["Domestic Help", [
+    ["maid", "Maid / Housekeeping"],
+    ["cook", "Cook"],
+    ["nanny", "Nanny / Babysitter"],
+    ["driver", "Driver"],
+    ["caretaker", "Caretaker"],
+    ["securityguard", "Security Guard"],
+    ["eldercare", "Elderly Care"],
+  ]],
+  ["Beauty & Personal Care", [
+    ["salon", "Salon (Unisex)"],
+    ["barber", "Barber / Men's Grooming"],
+    ["spa", "Spa & Massage"],
+    ["makeup", "Makeup Artist"],
+    ["mehndi", "Mehndi Artist"],
+    ["beautician", "Beautician (At Home)"],
+    ["tattoo", "Tattoo Studio"],
+    ["nailart", "Nail Art"],
+  ]],
+  ["Health & Wellness", [
+    ["doctor", "Doctor / Clinic"],
+    ["dentist", "Dentist"],
+    ["physiotherapy", "Physiotherapy"],
+    ["nursing", "Nursing / Home Care"],
+    ["pharmacy", "Pharmacy / Medical"],
+    ["labtest", "Lab / Diagnostic Test"],
+    ["ambulance", "Ambulance"],
+    ["gym", "Gym / Fitness"],
+    ["yoga", "Yoga / Meditation"],
+    ["dietician", "Dietician / Nutrition"],
+    ["mentalhealth", "Counselling / Therapy"],
+    ["veterinary", "Veterinary"],
+  ]],
+  ["Education & Coaching", [
+    ["tutor", "Tutor / Home Tuition"],
+    ["coaching", "Coaching / Exam Prep"],
+    ["musicclass", "Music Classes"],
+    ["danceclass", "Dance Classes"],
+    ["artclass", "Art & Craft Classes"],
+    ["languageclass", "Language Classes"],
+    ["sportscoaching", "Sports Coaching"],
+    ["skilltraining", "Skill / Vocational Training"],
+  ]],
+  ["Events & Photography", [
+    ["catering", "Catering"],
+    ["eventplanner", "Event / Wedding Planner"],
+    ["photography", "Photography"],
+    ["videography", "Videography"],
+    ["dj", "DJ / Sound"],
+    ["decoration", "Decoration / Florist"],
+    ["tenthouse", "Tent House"],
+    ["band", "Band / Live Music"],
+    ["anchor", "Anchor / Host"],
+  ]],
+  ["Food & Grocery", [
+    ["supermarket", "Supermarket / Grocery"],
+    ["bakery", "Bakery / Cake"],
+    ["restaurant", "Restaurant / Café"],
+    ["cloudkitchen", "Cloud Kitchen"],
+    ["tiffin", "Tiffin / Meal Service"],
+    ["milk", "Milk / Dairy Delivery"],
+    ["watersupply", "Water Can Supply"],
+    ["meatshop", "Meat / Fish Shop"],
+    ["vegetables", "Vegetable / Fruit Vendor"],
+  ]],
+  ["Automobile", [
+    ["carrental", "Car Rental"],
+    ["bikerental", "Bike Rental"],
+    ["carrepair", "Car Repair / Garage"],
+    ["bikerepair", "Bike Repair"],
+    ["carwash", "Car Wash / Detailing"],
+    ["towing", "Towing / Roadside"],
+    ["drivingschool", "Driving School"],
+    ["cardealer", "Car / Bike Dealer"],
+    ["spareparts", "Spare Parts"],
+  ]],
+  ["Professional & Business", [
+    ["lawyer", "Lawyer / Legal"],
+    ["accountant", "Accountant / CA"],
+    ["taxconsultant", "Tax / GST Consultant"],
+    ["financialadvisor", "Financial Advisor"],
+    ["insurance", "Insurance Agent"],
+    ["notary", "Notary / Documentation"],
+    ["consultant", "Business Consultant"],
+    ["recruitment", "Recruitment / HR"],
+    ["architect", "Architect"],
+  ]],
+  ["Tech & Digital", [
+    ["webdevelopment", "Web Development"],
+    ["appdevelopment", "App Development"],
+    ["graphicdesign", "Graphic Design"],
+    ["digitalmarketing", "Digital Marketing / SEO"],
+    ["computerrepair", "Computer / Laptop Repair"],
+    ["mobilerepair", "Mobile Repair"],
+    ["itsupport", "IT Support"],
+    ["dataentry", "Data Entry"],
+  ]],
+  ["Logistics & Delivery", [
+    ["courier", "Courier / Parcel"],
+    ["transport", "Transport / Truck"],
+    ["cargo", "Cargo / Freight"],
+    ["delivery", "Local Delivery"],
+  ]],
+  ["Apparel & Repair", [
+    ["tailor", "Tailor / Boutique"],
+    ["laundry", "Laundry / Dry Clean"],
+    ["cobbler", "Cobbler / Shoe Repair"],
+    ["embroidery", "Embroidery"],
+  ]],
+  ["Pets", [
+    ["petgrooming", "Pet Grooming"],
+    ["petboarding", "Pet Boarding / Daycare"],
+    ["pettrainer", "Pet Trainer"],
+    ["petshop", "Pet Shop / Supplies"],
+  ]],
+  ["Other Services", [
+    ["printing", "Printing / Xerox"],
+    ["astrology", "Astrology / Pooja"],
+    ["priest", "Priest / Pandit"],
+    ["translation", "Translation"],
+    ["scrapdealer", "Scrap Dealer"],
+    ["locksmith", "Locksmith"],
+    ["signboard", "Signboard / Banner"],
+    ["securityservices", "Security Services"],
+    ["service", "Other Home Service"],
+    ["general", "General / Other"],
+  ]],
 ];
 
 const EMPTY_FORM = {
@@ -172,8 +333,12 @@ export default function ListingsPage() {
           <div className="mt-4 space-y-3">
             <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className={field} placeholder="Title *" required />
             <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className={field}>
-              {CATEGORIES.map(([val, label]) => (
-                <option key={val} value={val}>{label}</option>
+              {CATEGORY_GROUPS.map(([group, items]) => (
+                <optgroup key={group} label={group}>
+                  {items.map(([val, label]) => (
+                    <option key={val} value={val}>{label}</option>
+                  ))}
+                </optgroup>
               ))}
             </select>
 
