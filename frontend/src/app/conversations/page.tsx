@@ -19,6 +19,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { ChannelBadge } from "@/components/ChannelBadge";
 import { PageHeader } from "@/components/PageHeader";
+import { TagPicker } from "@/components/TagPicker";
 import { contactService, conversationService, matchService } from "@/lib/api";
 import type { Conversation, Match, Message } from "@/types/api";
 
@@ -78,7 +79,7 @@ export default function ConversationsPage() {
   const [editName, setEditName] = useState("");
   const [editPhone, setEditPhone] = useState("");
   const [editNotes, setEditNotes] = useState("");
-  const [editTags, setEditTags] = useState("");
+  const [editTags, setEditTags] = useState<string[]>([]);
   const [savingContact, setSavingContact] = useState(false);
 
   const threadEndRef = useRef<HTMLDivElement>(null);
@@ -129,7 +130,7 @@ export default function ConversationsPage() {
     setEditName(selected.contact?.name || "");
     setEditPhone(selected.contact?.phone || "");
     setEditNotes(selected.contact?.profile?.notes || "");
-    setEditTags((selected.contact?.tags || []).join(", "));
+    setEditTags(selected.contact?.tags || []);
     // Clear unread on open.
     if (selected.unreadCount > 0) {
       conversationService.markRead(selected._id).catch(() => {});
@@ -207,7 +208,7 @@ export default function ConversationsPage() {
         name: editName,
         phone: editPhone,
         notes: editNotes,
-        tags: editTags.split(",").map((t) => t.trim()).filter(Boolean),
+        tags: editTags,
       });
       setConversations((prev) =>
         prev.map((c) => (c._id === selected._id ? { ...c, contact: { ...c.contact, ...res.data } } : c)),
@@ -494,14 +495,9 @@ export default function ConversationsPage() {
                     placeholder="Phone number"
                   />
                   <label className="block text-[11px] font-medium text-slate-500">
-                    <Tag size={11} className="mr-1 inline" /> Tags (comma separated)
+                    <Tag size={11} className="mr-1 inline" /> Tags
                   </label>
-                  <input
-                    value={editTags}
-                    onChange={(e) => setEditTags(e.target.value)}
-                    className="h-9 w-full rounded-md border border-slate-200 px-2.5 text-sm outline-none focus:border-teal-600"
-                    placeholder="vip, hot lead"
-                  />
+                  <TagPicker value={editTags} onChange={setEditTags} />
                   <label className="block text-[11px] font-medium text-slate-500">Notes</label>
                   <textarea
                     value={editNotes}

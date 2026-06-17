@@ -1,35 +1,47 @@
 "use client";
 
-import { BellPlus, Check, X } from "lucide-react";
+import { BellPlus, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { leadService } from "@/lib/api";
 import { FOLLOW_UP_TAGS, followUpTag } from "@/lib/followUpTags";
 import type { Lead } from "@/types/api";
 
 // Per-lead follow-up control used in the Leads table. Shows the active colored
 // tag (with a clear button), or a "+ Follow-up" button that opens a tag menu.
+// The menu is portalled to <body> with fixed positioning so the table's
+// overflow-hidden/overflow-x-auto never clips it.
 export function FollowUpControl({ lead, onChange }: { lead: Lead; onChange: () => void }) {
-  const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const [menu, setMenu] = useState<{ top: number; left: number } | null>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
 
   const active = lead.followUp?.active;
   const tag = followUpTag(lead.followUp?.tag);
 
+  const openMenu = () => {
+    const r = btnRef.current?.getBoundingClientRect();
+    if (r) setMenu({ top: r.bottom + 6, left: r.left });
+  };
+
   useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    if (!menu) return;
+    const close = () => setMenu(null);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    document.addEventListener("mousedown", close);
+    return () => {
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+      document.removeEventListener("mousedown", close);
     };
-    document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
-  }, [open]);
+  }, [menu]);
 
   const set = async (value: string) => {
     setBusy(true);
     try {
       await leadService.setFollowUp(lead._id, value);
-      setOpen(false);
+      setMenu(null);
       onChange();
     } finally {
       setBusy(false);
@@ -59,33 +71,41 @@ export function FollowUpControl({ lead, onChange }: { lead: Lead; onChange: () =
   }
 
   return (
-    <div className="relative" ref={ref}>
+    <>
       <button
+        ref={btnRef}
         type="button"
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => (menu ? setMenu(null) : openMenu())}
         className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:border-amber-400 hover:text-amber-600"
       >
         <BellPlus size={13} />
         Follow-up
       </button>
-      {open ? (
-        <div className="absolute left-0 z-20 mt-1 w-44 rounded-lg border border-slate-200 bg-white p-1 shadow-xl">
-          <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Mark for follow-up</p>
-          {FOLLOW_UP_TAGS.map((t) => (
-            <button
-              key={t.value}
-              type="button"
-              onClick={() => set(t.value)}
-              disabled={busy}
-              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-slate-700 hover:bg-slate-50"
+
+      {menu
+        ? createPortal(
+            <div
+              style={{ position: "fixed", top: menu.top, left: menu.left, zIndex: 60 }}
+              onMouseDown={(e) => e.stopPropagation()}
+              className="w-48 rounded-lg border border-slate-200 bg-white p-1 shadow-xl"
             >
-              <span className={`h-2 w-2 rounded-full ${t.dot}`} />
-              {t.label}
-              <Check size={12} className="ml-auto text-transparent" />
-            </button>
-          ))}
-        </div>
-      ) : null}
-    </div>
+              <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Mark for follow-up</p>
+              {FOLLOW_UP_TAGS.map((t) => (
+                <button
+                  key={t.value}
+                  type="button"
+                  onClick={() => set(t.value)}
+                  disabled={busy}
+                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                >
+                  <span className={`h-2.5 w-2.5 rounded-full ${t.dot}`} />
+                  {t.label}
+                </button>
+              ))}
+            </div>,
+            document.body,
+          )
+        : null}
+    </>
   );
 }
