@@ -1,5 +1,5 @@
 import Conversation from "@/server/models/Conversation.js";
-import { requireAuth } from "@/server/auth.js";
+import { requireApiAccess } from "@/server/auth.js";
 import { route, json } from "@/server/http.js";
 
 export const dynamic = "force-dynamic";
@@ -10,7 +10,7 @@ const STATUSES = ["open", "waiting", "matched", "closed", "stopped", "spam"];
 
 // Update a conversation: change status, toggle the auto-reply bot, or clear unread.
 export const PATCH = route(async (request: Request, ctx: Ctx) => {
-  await requireAuth(request);
+  await requireApiAccess(request);
   const { id } = await ctx.params;
   const body = await request.json().catch(() => ({}));
 

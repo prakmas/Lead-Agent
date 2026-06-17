@@ -1,5 +1,5 @@
 import Contact from "@/server/models/Contact.js";
-import { requireAuth } from "@/server/auth.js";
+import { requireApiAccess } from "@/server/auth.js";
 import { route, json } from "@/server/http.js";
 
 export const dynamic = "force-dynamic";
@@ -8,7 +8,7 @@ type Ctx = { params: Promise<{ id: string }> };
 
 // Edit a customer's saved details from the admin Inbox (name, phone, notes, tags).
 export const PATCH = route(async (request: Request, ctx: Ctx) => {
-  await requireAuth(request);
+  await requireApiAccess(request);
   const { id } = await ctx.params;
   const body = await request.json().catch(() => ({}));
 

@@ -37,6 +37,10 @@ export const endpoints = {
     followUpCancel: (id: string) => `/admin/follow-ups/${id}/cancel`,
 
     messagesSearch: "/admin/messages/search",
+
+    supervisors: "/admin/supervisors",
+    supervisor: (id: string) => `/admin/supervisors/${id}`,
+    supervisorPassword: (id: string) => `/admin/supervisors/${id}/password`,
   },
 
   locations: {

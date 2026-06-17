@@ -1,5 +1,5 @@
 import Lead from "@/server/models/Lead.js";
-import { requireAuth } from "@/server/auth.js";
+import { requireApiAccess } from "@/server/auth.js";
 import { route, json, parseListQuery, paginate } from "@/server/http.js";
 import { leadStatuses } from "@/server/utils/leadStatus.js";
 import createHttpError from "@/server/utils/createHttpError.js";
@@ -7,7 +7,7 @@ import createHttpError from "@/server/utils/createHttpError.js";
 export const dynamic = "force-dynamic";
 
 export const GET = route(async (request: Request) => {
-  await requireAuth(request);
+  await requireApiAccess(request);
   const options = parseListQuery(request);
   const query: Record<string, unknown> = {};
   if (options.get("status")) query.status = options.get("status");
@@ -25,7 +25,7 @@ export const GET = route(async (request: Request) => {
 });
 
 export const POST = route(async (request: Request) => {
-  await requireAuth(request);
+  await requireApiAccess(request);
   const { title, category, channel = "manual", status = "New", requirements = {} } = await request.json();
   if (!title || !category) throw createHttpError(400, "Title and category are required");
   if (!leadStatuses.includes(status)) throw createHttpError(400, "Invalid lead status");

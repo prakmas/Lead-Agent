@@ -1,5 +1,5 @@
 import Listing from "@/server/models/Listing.js";
-import { requireAuth } from "@/server/auth.js";
+import { requireApiAccess } from "@/server/auth.js";
 import { route, json, parseListQuery, paginate } from "@/server/http.js";
 import { triggerRematchForNewListing } from "@/server/services/followUp.service.js";
 import createHttpError from "@/server/utils/createHttpError.js";
@@ -7,7 +7,7 @@ import createHttpError from "@/server/utils/createHttpError.js";
 export const dynamic = "force-dynamic";
 
 export const GET = route(async (request: Request) => {
-  await requireAuth(request);
+  await requireApiAccess(request);
   const options = parseListQuery(request);
   const query: Record<string, unknown> = {};
   if (options.get("status")) query.status = options.get("status");
@@ -24,7 +24,7 @@ export const GET = route(async (request: Request) => {
 });
 
 export const POST = route(async (request: Request) => {
-  await requireAuth(request);
+  await requireApiAccess(request);
   const body = await request.json();
   if (!body.title || !body.category) throw createHttpError(400, "Title and category are required");
 

@@ -4,7 +4,7 @@ import FollowUp from "@/server/models/FollowUp.js";
 import Lead from "@/server/models/Lead.js";
 import Listing from "@/server/models/Listing.js";
 import Match from "@/server/models/Match.js";
-import { requireAuth } from "@/server/auth.js";
+import { requireApiAccess } from "@/server/auth.js";
 import { route, json } from "@/server/http.js";
 
 export const dynamic = "force-dynamic";
@@ -16,7 +16,7 @@ const contactStatsByChannel = () =>
   ]);
 
 export const GET = route(async (request: Request) => {
-  await requireAuth(request);
+  await requireApiAccess(request);
 
   const [
     totalLeads,

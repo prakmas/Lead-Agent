@@ -8,11 +8,25 @@ export type LeadStatus =
   | "Closed"
   | "Spam";
 
+export type ModuleAccess = "none" | "view" | "manage";
+
 export type AdminUser = {
   id: string;
   name: string;
   email: string;
   role: string;
+  permissions?: Record<string, ModuleAccess>;
+};
+
+export type Supervisor = {
+  _id: string;
+  name: string;
+  email: string;
+  role: string;
+  permissions: Record<string, ModuleAccess>;
+  isActive: boolean;
+  lastLoginAt?: string;
+  createdAt?: string;
 };
 
 export type Channel = {

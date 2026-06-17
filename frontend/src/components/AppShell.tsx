@@ -8,22 +8,26 @@ import {
   ListChecks,
   LogOut,
   Settings,
+  ShieldCheck,
   Users,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { ReactNode, useEffect, useState } from "react";
-import { clearSession, getAdmin, getToken } from "@/lib/auth";
+import { ReactNode, useEffect, useMemo, useState } from "react";
+import { authService } from "@/lib/api";
+import { clearSession, getAdmin, getToken, saveSession } from "@/lib/auth";
 import type { AdminUser } from "@/types/api";
 import { FollowUpReminder } from "@/components/FollowUpReminder";
 
+// Each nav item maps to a module key — supervisors only see modules they can
+// access. The owner sees everything plus Supervisors (RBAC management).
 const navItems = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/leads", label: "Leads", icon: Users },
-  { href: "/conversations", label: "Inbox", icon: Inbox },
-  { href: "/listings", label: "Listings", icon: ListChecks },
-  { href: "/matches", label: "Matches", icon: BarChart3 },
-  { href: "/settings", label: "Settings", icon: Settings },
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, module: "dashboard" },
+  { href: "/leads", label: "Leads", icon: Users, module: "leads" },
+  { href: "/conversations", label: "Inbox", icon: Inbox, module: "inbox" },
+  { href: "/listings", label: "Listings", icon: ListChecks, module: "listings" },
+  { href: "/matches", label: "Matches", icon: BarChart3, module: "matches" },
+  { href: "/settings", label: "Settings", icon: Settings, module: "settings" },
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -38,12 +42,40 @@ export function AppShell({ children }: { children: ReactNode }) {
       return;
     }
     setAdmin(getAdmin());
+    // Re-fetch the live profile so permission/role changes (and revocation)
+    // take effect without a re-login.
+    authService
+      .me()
+      .then((res) => {
+        setAdmin(res.admin);
+        saveSession(token, res.admin);
+      })
+      .catch(() => {
+        clearSession();
+        router.replace("/login");
+      });
   }, [router]);
+
+  const isOwner = admin?.role === "owner" || admin?.role === "admin";
+
+  // Visible nav = owner sees all; supervisor sees modules with view/manage.
+  const visibleNav = useMemo(
+    () =>
+      navItems.filter(
+        (item) => isOwner || (admin?.permissions?.[item.module] && admin.permissions[item.module] !== "none"),
+      ),
+    [admin, isOwner],
+  );
 
   const logout = () => {
     clearSession();
     router.replace("/login");
   };
+
+  // Owner also gets the Supervisors (RBAC) link at the end.
+  const links = isOwner
+    ? [...visibleNav, { href: "/supervisors", label: "Supervisors", icon: ShieldCheck, module: "supervisors" }]
+    : visibleNav;
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-950">
@@ -58,7 +90,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </div>
         <nav className="space-y-1 p-3">
-          {navItems.map((item) => {
+          {links.map((item) => {
             const Icon = item.icon;
             const isActive = pathname === item.href;
             return (
@@ -102,15 +134,15 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </header>
 
-        <nav className="grid grid-cols-6 border-b border-slate-200 bg-white lg:hidden">
-          {navItems.map((item) => {
+        <nav className="flex justify-around border-b border-slate-200 bg-white lg:hidden">
+          {links.map((item) => {
             const Icon = item.icon;
             const isActive = pathname === item.href;
             return (
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex h-12 items-center justify-center ${isActive ? "text-teal-700" : "text-slate-500"}`}
+                className={`flex h-12 flex-1 items-center justify-center ${isActive ? "text-teal-700" : "text-slate-500"}`}
                 title={item.label}
               >
                 <Icon size={18} />

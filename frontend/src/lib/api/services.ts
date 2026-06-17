@@ -10,8 +10,10 @@ import type {
   LocationSuggestion,
   Match,
   Message,
+  ModuleAccess,
   Paginated,
   PincodeResult,
+  Supervisor,
 } from "@/types/api";
 import { http, type QueryParams } from "./client";
 import { endpoints } from "./endpoints";
@@ -95,6 +97,21 @@ export const contactService = {
 export const followUpService = {
   list: (query?: QueryParams) => http.get<Paginated<FollowUp>>(endpoints.admin.followUps, { query }),
   cancel: (id: string) => http.patch<{ message?: string }>(endpoints.admin.followUpCancel(id)),
+};
+
+export const supervisorService = {
+  list: () => http.get<{ data: Supervisor[] }>(endpoints.admin.supervisors),
+  create: (payload: { name: string; email: string; password: string; permissions: Record<string, ModuleAccess> }) =>
+    http.post<{ data: Supervisor }>(endpoints.admin.supervisors, payload),
+  update: (id: string, payload: { name?: string; isActive?: boolean; permissions?: Record<string, ModuleAccess> }) =>
+    http.patch<{ data: Supervisor }>(endpoints.admin.supervisor(id), payload),
+  setActive: (id: string, isActive: boolean) =>
+    http.patch<{ data: Supervisor }>(endpoints.admin.supervisor(id), { isActive }),
+  setPermissions: (id: string, permissions: Record<string, ModuleAccess>) =>
+    http.patch<{ data: Supervisor }>(endpoints.admin.supervisor(id), { permissions }),
+  setPassword: (id: string, password: string) =>
+    http.post<{ message: string }>(endpoints.admin.supervisorPassword(id), { password }),
+  revoke: (id: string) => http.del<{ message: string }>(endpoints.admin.supervisor(id)),
 };
 
 export const locationService = {

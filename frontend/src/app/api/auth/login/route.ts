@@ -20,6 +20,12 @@ export const POST = route(async (request: Request) => {
 
   return json({
     token: signToken(admin),
-    admin: { id: admin._id, name: admin.name, email: admin.email, role: admin.role },
+    admin: {
+      id: admin._id,
+      name: admin.name,
+      email: admin.email,
+      role: admin.role,
+      permissions: admin.permissions || {},
+    },
   });
 });
