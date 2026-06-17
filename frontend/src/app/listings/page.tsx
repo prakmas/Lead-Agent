@@ -5,7 +5,7 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { CategorySelect, type CategoryGroup } from "@/components/CategorySelect";
 import { ImageUploader } from "@/components/ImageUploader";
-import { PageLoader } from "@/components/Loader";
+import { PageLoader, Spinner } from "@/components/Loader";
 import { ListingFilters, EMPTY_GEO, type GeoFilter } from "@/components/ListingFilters";
 import { LocationPicker, type LocationValue } from "@/components/LocationPicker";
 import { MapPicker, type GeoValue } from "@/components/MapPicker";
@@ -299,28 +299,62 @@ export default function ListingsPage() {
   const [appliedGeo, setAppliedGeo] = useState<GeoFilter>(EMPTY_GEO);
   const [supervisors, setSupervisors] = useState<Supervisor[]>([]);
 
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const PAGE_SIZE = 30;
+
   const me = getAdmin();
   const isOwner = me?.role === "owner" || me?.role === "admin";
+
+  const filterQuery = (pageNum: number) => ({
+    createdBy: creatorFilter || undefined,
+    state: appliedGeo.state || undefined,
+    district: appliedGeo.district || undefined,
+    area: appliedGeo.area || undefined,
+    pincode: appliedGeo.pincodes.length ? appliedGeo.pincodes.join(",") : undefined,
+    page: pageNum,
+    limit: PAGE_SIZE,
+  });
   const creatorId = (l: Listing) =>
     typeof l.createdBy === "object" && l.createdBy ? l.createdBy._id : (l.createdBy as string | undefined);
   // A supervisor may only edit/delete listings they created; the owner edits all.
   const canManage = (l: Listing) => isOwner || (!!me && creatorId(l) === me.id);
 
+  // Load the first page (used initially, on filter change, and on Refresh).
   const loadListings = useCallback(async () => {
     setLoadingList(true);
+    setPage(1);
     try {
-      const result = await listingService.list({
-        createdBy: creatorFilter || undefined,
-        state: appliedGeo.state || undefined,
-        district: appliedGeo.district || undefined,
-        area: appliedGeo.area || undefined,
-        pincode: appliedGeo.pincodes.length ? appliedGeo.pincodes.join(",") : undefined,
-      });
+      const result = await listingService.list(filterQuery(1));
+      setTotal(result.total);
       setListings(result.data);
     } finally {
       setLoadingList(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [creatorFilter, appliedGeo]);
+
+  // Infinite scroll — append the next page when the user nears the bottom.
+  const loadMore = useCallback(async () => {
+    if (loadingMore || loadingList || listings.length >= total) return;
+    setLoadingMore(true);
+    const next = page + 1;
+    try {
+      const result = await listingService.list(filterQuery(next));
+      setTotal(result.total);
+      setListings((prev) => [...prev, ...result.data]);
+      setPage(next);
+    } finally {
+      setLoadingMore(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadingMore, loadingList, listings.length, total, page, creatorFilter, appliedGeo]);
+
+  const onListScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const el = e.currentTarget;
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < 240) loadMore();
+  };
 
   // Debounce filter changes (pincode typing) before querying.
   useEffect(() => {
@@ -503,6 +537,7 @@ export default function ListingsPage() {
     try {
       await listingService.remove(deleteTarget._id, deleteReason.trim());
       setListings((items) => items.filter((l) => l._id !== deleteTarget._id));
+      setTotal((n) => Math.max(0, n - 1));
       if (editingId === deleteTarget._id) resetForm();
       setDeleteTarget(null);
       setDeleteReason("");
@@ -631,7 +666,7 @@ export default function ListingsPage() {
           <div className="space-y-2.5 border-b border-slate-200 px-4 py-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 className="text-sm font-semibold text-slate-950">
-                Active inventory <span className="ml-1 text-xs font-normal text-slate-400">({listings.length})</span>
+                Active inventory <span className="ml-1 text-xs font-normal text-slate-400">({total.toLocaleString()})</span>
               </h2>
               <button type="button" onClick={() => loadListings().catch((err) => setError(err.message))} className="inline-flex h-8 items-center gap-2 rounded-md border border-slate-300 px-2 text-xs font-medium hover:bg-slate-50">
                 <RefreshCw size={14} /> Refresh
@@ -695,7 +730,7 @@ export default function ListingsPage() {
           ) : listings.length === 0 ? (
             <p className="px-4 py-6 text-sm text-slate-500">No listings yet — create one.</p>
           ) : (
-            <div className="max-h-[calc(100vh-15rem)] divide-y divide-slate-100 overflow-y-auto">
+            <div className="max-h-[calc(100vh-15rem)] divide-y divide-slate-100 overflow-y-auto" onScroll={onListScroll}>
               {listings.map((listing) => (
                 <article
                   key={listing._id}
@@ -789,6 +824,15 @@ export default function ListingsPage() {
                   </div>
                 </article>
               ))}
+              {/* Infinite-scroll footer */}
+              {listings.length < total ? (
+                <div className="flex items-center justify-center gap-2 py-3 text-xs text-slate-400">
+                  {loadingMore ? <Spinner size={14} className="text-teal-600" /> : null}
+                  {loadingMore ? "Loading more…" : `Scroll for more · showing ${listings.length} of ${total.toLocaleString()}`}
+                </div>
+              ) : (
+                <p className="py-3 text-center text-[11px] text-slate-300">All {total.toLocaleString()} shown</p>
+              )}
             </div>
           )}
         </section>
