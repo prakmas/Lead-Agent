@@ -58,7 +58,7 @@ export const categoryTerms = {
   gym: ["gym", "fitness center", "fitness centre", "workout", "crossfit"],
   yoga: ["yoga", "meditation", "pranayama"],
   dietician: ["dietician", "dietitian", "nutritionist", "diet plan"],
-  mentalhealth: ["counselling", "counseling", "therapist", "psychologist", "mental health"],
+  mentalhealth: ["mental health", "therapist", "psychologist", "psychiatrist", "depression", "anxiety", "mental wellness"],
   veterinary: ["veterinary", "vet", "animal doctor", "pet doctor"],
 
   // ── Education & coaching ──
@@ -111,19 +111,46 @@ export const categoryTerms = {
   financialadvisor: ["financial advisor", "investment advisor", "mutual fund", "wealth"],
   insurance: ["insurance", "lic", "policy agent", "health insurance"],
   notary: ["notary", "documentation", "affidavit", "stamp paper"],
-  consultant: ["business consultant", "consultancy", "startup advisor"],
+  consultant: ["business consultant", "business consultancy", "management consultant", "startup advisor"],
   recruitment: ["recruitment", "hr consultant", "placement", "hiring", "manpower"],
   architect: ["architect", "architecture", "building plan", "structural design"],
 
   // ── Tech & digital ──
-  webdevelopment: ["web development", "website", "web design", "web developer"],
-  appdevelopment: ["app development", "mobile app", "android app", "ios app"],
-  graphicdesign: ["graphic design", "logo design", "graphic designer", "poster design"],
-  digitalmarketing: ["digital marketing", "seo", "social media marketing", "google ads", "smm"],
+  webdevelopment: ["web development", "website", "web design", "web developer", "landing page"],
+  appdevelopment: ["app development", "mobile app", "android app", "ios app", "flutter", "react native"],
+  graphicdesign: ["graphic design", "logo design", "graphic designer", "poster design", "branding"],
+  digitalmarketing: ["digital marketing", "seo", "social media marketing", "google ads", "smm", "performance marketing"],
   computerrepair: ["computer repair", "laptop repair", "pc repair", "desktop repair"],
   mobilerepair: ["mobile repair", "phone repair", "screen replacement", "cell repair"],
-  itsupport: ["it support", "network support", "system admin"],
+  itsupport: ["it support", "it services", "network support", "system admin", "tech support", "annual maintenance", "amc"],
   dataentry: ["data entry", "typing work", "form filling"],
+
+  // ── Software & IT services ──
+  softwaredevelopment: ["software development", "software developer", "custom software", "software company", "software solution", "software project", "saas development", "api development"],
+  softwareconsultancy: ["software consultancy", "it consultancy", "it consulting", "software consultant", "technology consulting", "it solutions"],
+  uiuxdesign: ["ui ux", "ui/ux", "ux design", "ui design", "product design", "figma design"],
+  qatesting: ["qa testing", "software testing", "manual testing", "automation testing", "selenium", "test engineer"],
+  cloudservices: ["cloud services", "devops", "aws", "azure", "google cloud", "kubernetes", "ci cd", "cloud migration"],
+  cybersecurity: ["cyber security", "cybersecurity", "penetration testing", "ethical hacking", "vapt", "infosec"],
+  datascience: ["data science", "machine learning", "artificial intelligence", "ai ml", "deep learning", "data analytics", "data analyst"],
+  databaseservices: ["database", "dba", "sql developer", "mongodb", "database admin", "database management"],
+  erpcrm: ["erp", "crm", "salesforce", "sap", "odoo", "zoho", "erp solution"],
+  ecommercesetup: ["ecommerce", "e-commerce", "online store", "shopify", "woocommerce", "magento"],
+  softwaresupport: ["software support", "software maintenance", "bug fixing", "software amc"],
+  gamedevelopment: ["game development", "game developer", "unity developer", "unreal", "2d game", "3d game"],
+  blockchain: ["blockchain", "web3", "smart contract", "crypto development", "nft development", "solidity"],
+
+  // ── Training & career ──
+  ittraining: ["it training", "software training", "coding bootcamp", "programming course", "java training", "python training", "full stack course", "software course"],
+  jobconsultancy: ["job consultancy", "placement consultancy", "job consultant", "placement agency", "job placement", "staffing", "naukri", "job assistance", "job support"],
+  careercounseling: ["career counselling", "career counseling", "career guidance", "career advice"],
+  resumewriting: ["resume writing", "cv writing", "resume builder", "linkedin profile"],
+  interviewprep: ["interview preparation", "interview prep", "mock interview", "interview coaching"],
+  corporatetraining: ["corporate training", "employee training", "soft skills training", "team training"],
+  onlinecourses: ["online course", "online courses", "e-learning", "elearning", "online class", "online tutorial"],
+  certificationcoaching: ["certification", "aws certification", "pmp", "scrum master", "certification training"],
+  internshiptraining: ["internship", "industrial training", "summer training", "live project training"],
+  studyabroad: ["study abroad", "visa consultancy", "education consultant", "overseas education", "student visa", "ielts coaching"],
 
   // ── Logistics & delivery ──
   courier: ["courier", "parcel", "shipment"],
