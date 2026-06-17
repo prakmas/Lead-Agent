@@ -90,16 +90,15 @@ export function AppShell({ children }: { children: ReactNode }) {
   };
 
   // Owner also gets the Supervisors (RBAC) link at the end.
-  const canListings = isOwner || (admin?.permissions?.listings && admin.permissions.listings !== "none");
+  // "Deleted listings" is its own RBAC module — only show it when granted.
+  const canDeleted = isOwner || (admin?.permissions?.deleted && admin.permissions.deleted !== "none");
   const base = visibleNav.map((n) => ({ ...n, badge: 0 }));
-  // Insert "Deleted listings" right after Listings for anyone with listings access.
-  const withDeleted = canListings
-    ? base.flatMap((n) =>
-        n.href === "/listings"
-          ? [n, { href: "/deleted-listings", label: "Deleted listings", icon: Trash2, module: "listings", badge: 0 }]
-          : [n],
-      )
-    : base;
+  const withDeleted = (() => {
+    if (!canDeleted) return base;
+    const link = { href: "/deleted-listings", label: "Deleted listings", icon: Trash2, module: "deleted", badge: 0 };
+    const idx = base.findIndex((n) => n.href === "/listings");
+    return idx === -1 ? [...base, link] : [...base.slice(0, idx + 1), link, ...base.slice(idx + 1)];
+  })();
   const links = isOwner
     ? [...withDeleted, { href: "/supervisors", label: "Supervisors", icon: ShieldCheck, module: "supervisors", badge: pendingSupervisors }]
     : withDeleted;

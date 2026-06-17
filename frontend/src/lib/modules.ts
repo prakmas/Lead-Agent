@@ -7,6 +7,7 @@ export const MODULES: { key: string; label: string }[] = [
   { key: "leads", label: "Leads" },
   { key: "inbox", label: "Inbox" },
   { key: "listings", label: "Listings" },
+  { key: "deleted", label: "Deleted listings" },
   { key: "matches", label: "Matches" },
   { key: "settings", label: "Settings" },
 ];

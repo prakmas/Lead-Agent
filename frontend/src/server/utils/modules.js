@@ -8,6 +8,7 @@ export const MODULES = [
   { key: "leads", label: "Leads", route: "/leads" },
   { key: "inbox", label: "Inbox", route: "/conversations" },
   { key: "listings", label: "Listings", route: "/listings" },
+  { key: "deleted", label: "Deleted listings", route: "/deleted-listings" },
   { key: "matches", label: "Matches", route: "/matches" },
   { key: "settings", label: "Settings", route: "/settings" },
 ];

@@ -34,7 +34,8 @@ const PATH_MODULE = [
   [/^\/api\/admin\/stats/, "dashboard"],
   [/^\/api\/admin\/leads/, "leads"],
   [/^\/api\/admin\/(conversations|contacts|messages)/, "inbox"],
-  [/^\/api\/admin\/(listings|deleted-listings)/, "listings"],
+  [/^\/api\/admin\/deleted-listings/, "deleted"],
+  [/^\/api\/admin\/listings/, "listings"],
   [/^\/api\/admin\/matches/, "matches"],
   [/^\/api\/admin\/(channels|follow-ups)/, "settings"],
 ];
