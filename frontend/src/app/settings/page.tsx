@@ -5,8 +5,8 @@ import { useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { ChannelBadge } from "@/components/ChannelBadge";
 import { PageHeader } from "@/components/PageHeader";
-import { api, apiUrl } from "@/lib/api";
-import type { Channel, FollowUp, Paginated } from "@/types/api";
+import { apiUrl, channelService, followUpService } from "@/lib/api";
+import type { Channel, FollowUp } from "@/types/api";
 
 export default function SettingsPage() {
   const [channels, setChannels] = useState<Channel[]>([]);
@@ -16,12 +16,14 @@ export default function SettingsPage() {
   const [error, setError] = useState("");
 
   const loadChannels = () =>
-    api<{ data: Channel[] }>("/admin/channels")
+    channelService
+      .list()
       .then((r) => setChannels(r.data))
       .catch((err) => setError(err.message));
 
   const loadFollowUps = (status: string) =>
-    api<Paginated<FollowUp>>(`/admin/follow-ups?status=${status}&limit=50`)
+    followUpService
+      .list({ status, limit: 50 })
       .then((r) => {
         setFollowUps(r.data);
         setFollowUpTotal(r.total);
@@ -35,7 +37,7 @@ export default function SettingsPage() {
   }, []);
 
   const cancelFollowUp = async (id: string) => {
-    await api(`/admin/follow-ups/${id}/cancel`, { method: "PATCH" });
+    await followUpService.cancel(id);
     loadFollowUps(fuStatus);
   };
 

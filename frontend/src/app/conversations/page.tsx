@@ -19,8 +19,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { ChannelBadge } from "@/components/ChannelBadge";
 import { PageHeader } from "@/components/PageHeader";
-import { api } from "@/lib/api";
-import type { Conversation, Match, Message, Paginated } from "@/types/api";
+import { contactService, conversationService, matchService } from "@/lib/api";
+import type { Conversation, Match, Message } from "@/types/api";
 
 const STATUS_OPTIONS = ["open", "waiting", "matched", "closed", "stopped", "spam"];
 
@@ -90,10 +90,7 @@ export default function ConversationsPage() {
   const botEnabled = selected?.metadata?.botEnabled !== false;
 
   const loadConversations = useCallback(async () => {
-    const params = new URLSearchParams();
-    if (statusFilter) params.set("status", statusFilter);
-    params.set("limit", "100");
-    const result = await api<Paginated<Conversation>>(`/admin/conversations?${params.toString()}`);
+    const result = await conversationService.list({ status: statusFilter || undefined, limit: 100 });
     setConversations(result.data);
     setSelectedId((prev) => prev || result.data[0]?._id || null);
   }, [statusFilter]);
@@ -114,11 +111,11 @@ export default function ConversationsPage() {
       setMatches([]);
       return;
     }
-    const msgs = await api<{ data: Message[] }>(`/admin/conversations/${conversation._id}/messages`);
+    const msgs = await conversationService.messages(conversation._id);
     setMessages(msgs.data);
     const leadId = conversation.lead?._id;
     if (leadId) {
-      const m = await api<Paginated<Match>>(`/admin/matches?leadId=${leadId}&limit=10`);
+      const m = await matchService.list({ leadId, limit: 10 });
       setMatches(m.data);
     } else {
       setMatches([]);
@@ -135,10 +132,7 @@ export default function ConversationsPage() {
     setEditTags((selected.contact?.tags || []).join(", "));
     // Clear unread on open.
     if (selected.unreadCount > 0) {
-      api(`/admin/conversations/${selected._id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ markRead: true }),
-      }).catch(() => {});
+      conversationService.markRead(selected._id).catch(() => {});
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
@@ -147,7 +141,8 @@ export default function ConversationsPage() {
   useEffect(() => {
     if (!selectedId) return;
     const t = setInterval(() => {
-      api<{ data: Message[] }>(`/admin/conversations/${selectedId}/messages`)
+      conversationService
+        .messages(selectedId)
         .then((r) => setMessages(r.data))
         .catch(() => {});
     }, 8000);
@@ -169,10 +164,7 @@ export default function ConversationsPage() {
     setSending(true);
     setError("");
     try {
-      const res = await api<{ data: Message; sendResult?: { ok?: boolean; error?: string } }>(
-        `/admin/conversations/${selected._id}/reply`,
-        { method: "POST", body: JSON.stringify({ text }) },
-      );
+      const res = await conversationService.reply(selected._id, text);
       setMessages((prev) => [...prev, res.data]);
       setDraft("");
       if (res.sendResult?.ok === false) {
@@ -189,10 +181,7 @@ export default function ConversationsPage() {
   const toggleBot = async () => {
     if (!selected) return;
     try {
-      const res = await api<{ data: Conversation }>(`/admin/conversations/${selected._id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ botEnabled: !botEnabled }),
-      });
+      const res = await conversationService.setBot(selected._id, !botEnabled);
       setConversations((prev) => prev.map((c) => (c._id === selected._id ? res.data : c)));
       flash(res.data.metadata?.botEnabled === false ? "Auto-reply bot turned OFF" : "Auto-reply bot turned ON");
     } catch (err) {
@@ -203,10 +192,7 @@ export default function ConversationsPage() {
   const changeStatus = async (status: string) => {
     if (!selected) return;
     try {
-      const res = await api<{ data: Conversation }>(`/admin/conversations/${selected._id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ status }),
-      });
+      const res = await conversationService.setStatus(selected._id, status);
       setConversations((prev) => prev.map((c) => (c._id === selected._id ? res.data : c)));
     } catch (err) {
       setError((err as Error).message);
@@ -217,14 +203,11 @@ export default function ConversationsPage() {
     if (!selected?.contact?._id) return;
     setSavingContact(true);
     try {
-      const res = await api<{ data: Conversation["contact"] }>(`/admin/contacts/${selected.contact._id}`, {
-        method: "PATCH",
-        body: JSON.stringify({
-          name: editName,
-          phone: editPhone,
-          notes: editNotes,
-          tags: editTags.split(",").map((t) => t.trim()).filter(Boolean),
-        }),
+      const res = await contactService.update(selected.contact._id, {
+        name: editName,
+        phone: editPhone,
+        notes: editNotes,
+        tags: editTags.split(",").map((t) => t.trim()).filter(Boolean),
       });
       setConversations((prev) =>
         prev.map((c) => (c._id === selected._id ? { ...c, contact: { ...c.contact, ...res.data } } : c)),

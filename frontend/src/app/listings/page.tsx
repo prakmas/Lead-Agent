@@ -8,9 +8,9 @@ import { ImageUploader } from "@/components/ImageUploader";
 import { LocationPicker, type LocationValue } from "@/components/LocationPicker";
 import { MapPicker, type GeoValue } from "@/components/MapPicker";
 import { PageHeader } from "@/components/PageHeader";
-import { api } from "@/lib/api";
+import { listingService } from "@/lib/api";
 import { dataUrlToThumb } from "@/lib/image";
-import type { Listing, Paginated } from "@/types/api";
+import type { Listing } from "@/types/api";
 
 // A broad, real-world catalogue of categories grouped for an easy dropdown.
 // `value` is a stable lowercase slug stored on the listing; `label` is shown.
@@ -234,7 +234,7 @@ export default function ListingsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
 
   const loadListings = useCallback(async () => {
-    const result = await api<Paginated<Listing>>("/admin/listings");
+    const result = await listingService.list();
     setListings(result.data);
   }, []);
 
@@ -253,7 +253,7 @@ export default function ListingsPage() {
   const startEdit = async (id: string) => {
     setError("");
     try {
-      const l = await api<Listing>(`/admin/listings/${id}`);
+      const l = await listingService.get(id);
       setEditingId(id);
       setForm({
         title: l.title || "",
@@ -308,10 +308,10 @@ export default function ListingsPage() {
       };
 
       if (editingId) {
-        await api<Listing>(`/admin/listings/${editingId}`, { method: "PATCH", body: JSON.stringify(payload) });
+        await listingService.update(editingId, payload);
         setRematchNote("Listing updated.");
       } else {
-        await api<Listing>("/admin/listings", { method: "POST", body: JSON.stringify(payload) });
+        await listingService.create(payload);
         setRematchNote("Listing saved. Active leads will get a match update within 1 minute.");
       }
       resetForm();
@@ -324,7 +324,7 @@ export default function ListingsPage() {
   };
 
   const deleteListing = async (id: string) => {
-    await api(`/admin/listings/${id}`, { method: "DELETE" });
+    await listingService.remove(id);
     setListings((items) => items.filter((l) => l._id !== id));
     if (editingId === id) resetForm();
   };

@@ -3,9 +3,8 @@
 import { Bot, LogIn } from "lucide-react";
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
-import { api } from "@/lib/api";
+import { authService } from "@/lib/api";
 import { saveSession } from "@/lib/auth";
-import type { AdminUser } from "@/types/api";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -20,11 +19,7 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const response = await api<{ token: string; admin: AdminUser }>("/auth/login", {
-        method: "POST",
-        auth: false,
-        body: JSON.stringify({ email, password }),
-      });
+      const response = await authService.login(email, password);
 
       saveSession(response.token, response.admin);
       router.replace("/dashboard");

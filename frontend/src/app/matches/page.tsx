@@ -4,15 +4,16 @@ import { useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { PageHeader } from "@/components/PageHeader";
 import { StatusBadge } from "@/components/StatusBadge";
-import { api } from "@/lib/api";
-import type { Match, Paginated } from "@/types/api";
+import { matchService } from "@/lib/api";
+import type { Match } from "@/types/api";
 
 export default function MatchesPage() {
   const [matches, setMatches] = useState<Match[]>([]);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    api<Paginated<Match>>("/admin/matches")
+    matchService
+      .list()
       .then((result) => setMatches(result.data))
       .catch((err) => setError(err.message));
   }, []);

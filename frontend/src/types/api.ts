@@ -126,3 +126,29 @@ export type Paginated<T> = {
   limit: number;
   pages: number;
 };
+
+// ── Location lookup responses ──
+export type LocationSuggestion = {
+  name: string;
+  label: string;
+  type: string;
+  state?: string;
+  city?: string;
+  country?: string;
+};
+
+export type AreaResult = {
+  label: string;
+  area: string;
+  district: string;
+  state: string;
+  country: string;
+  pincode: string;
+};
+
+export type PincodeResult = {
+  area: string;
+  district: string;
+  state: string;
+  country: string;
+};

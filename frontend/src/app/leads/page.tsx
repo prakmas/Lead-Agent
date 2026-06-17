@@ -6,8 +6,8 @@ import { AppShell } from "@/components/AppShell";
 import { ChannelBadge } from "@/components/ChannelBadge";
 import { PageHeader } from "@/components/PageHeader";
 import { StatusBadge } from "@/components/StatusBadge";
-import { api } from "@/lib/api";
-import type { Lead, LeadStatus, Paginated } from "@/types/api";
+import { leadService } from "@/lib/api";
+import type { Lead, LeadStatus } from "@/types/api";
 
 const statuses: LeadStatus[] = ["New", "Contacted", "Qualified", "Matched", "Closed", "Spam"];
 
@@ -18,17 +18,15 @@ export default function LeadsPage() {
   const [error, setError] = useState("");
 
   const loadLeads = useCallback(async () => {
-    const params = new URLSearchParams();
-    if (search) params.set("search", search);
-    if (status) params.set("status", status);
-    const result = await api<Paginated<Lead>>(`/admin/leads?${params.toString()}`);
+    const result = await leadService.list({ search, status });
     setLeads(result.data);
   }, [search, status]);
 
   useEffect(() => {
     let isMounted = true;
 
-    api<Paginated<Lead>>("/admin/leads")
+    leadService
+      .list()
       .then((result) => {
         if (isMounted) setLeads(result.data);
       })
@@ -42,10 +40,7 @@ export default function LeadsPage() {
   }, []);
 
   const changeStatus = async (leadId: string, nextStatus: string) => {
-    const updated = await api<Lead>(`/admin/leads/${leadId}`, {
-      method: "PATCH",
-      body: JSON.stringify({ status: nextStatus }),
-    });
+    const updated = await leadService.update(leadId, { status: nextStatus });
     setLeads((items) => items.map((item) => (item._id === leadId ? updated : item)));
   };
 

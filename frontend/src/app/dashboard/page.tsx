@@ -6,7 +6,7 @@ import { AppShell } from "@/components/AppShell";
 import { ChannelBadge } from "@/components/ChannelBadge";
 import { PageHeader } from "@/components/PageHeader";
 import { StatTile } from "@/components/StatTile";
-import { api } from "@/lib/api";
+import { statsService } from "@/lib/api";
 
 type Stats = {
   totals: {
@@ -25,7 +25,8 @@ export default function DashboardPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    api<Stats>("/admin/stats")
+    statsService
+      .get<Stats>()
       .then(setStats)
       .catch((err) => setError(err.message));
   }, []);
