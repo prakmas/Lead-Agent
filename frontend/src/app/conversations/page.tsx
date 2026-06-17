@@ -100,6 +100,12 @@ export default function ConversationsPage() {
     loadConversations().catch((err) => setError(err.message));
   }, [loadConversations]);
 
+  // Open a specific conversation when arriving from a notification (?c=<id>).
+  useEffect(() => {
+    const c = new URLSearchParams(window.location.search).get("c");
+    if (c) setSelectedId(c);
+  }, []);
+
   // Poll the list periodically so new inbound messages surface without a refresh.
   useEffect(() => {
     const t = setInterval(() => loadConversations().catch(() => {}), 15000);

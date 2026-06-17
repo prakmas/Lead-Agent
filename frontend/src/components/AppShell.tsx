@@ -18,6 +18,7 @@ import { authService } from "@/lib/api";
 import { clearSession, getAdmin, getToken, saveSession } from "@/lib/auth";
 import type { AdminUser } from "@/types/api";
 import { FollowUpReminder } from "@/components/FollowUpReminder";
+import { NotificationBell } from "@/components/NotificationBell";
 
 // Each nav item maps to a module key — supervisors only see modules they can
 // access. The owner sees everything plus Supervisors (RBAC management).
@@ -57,6 +58,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, [router]);
 
   const isOwner = admin?.role === "owner" || admin?.role === "admin";
+  const canInbox = isOwner || (admin?.permissions?.inbox && admin.permissions.inbox !== "none");
 
   // Visible nav = owner sees all; supervisor sees modules with view/manage.
   const visibleNav = useMemo(
@@ -118,6 +120,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <p className="text-xs text-slate-500">WhatsApp, Instagram, Facebook unified workflow</p>
           </div>
           <div className="flex items-center gap-3">
+            {canInbox ? <NotificationBell /> : null}
             <div className="hidden text-right sm:block">
               <p className="text-sm font-medium">{admin?.name || "Admin"}</p>
               <p className="text-xs text-slate-500">{admin?.email}</p>
