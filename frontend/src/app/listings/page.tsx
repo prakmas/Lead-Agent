@@ -301,11 +301,16 @@ export default function ListingsPage() {
       .catch(() => {});
   }, [isOwner]);
 
-  // Supervisor badges appear ONLY after a pincode is selected, and show ONLY the
-  // supervisors assigned to that exact pincode.
+  // Supervisor badges appear ONLY after a pincode is selected. Show supervisors
+  // who are EITHER assigned to that pincode (territory) OR who created a listing
+  // currently shown for it — so the badges stay consistent with the per-listing
+  // creator badges.
   const showSupervisorBadges = isOwner && geoFilter.pincodes.length > 0;
-  const shownSupervisors = supervisors.filter((s) =>
-    (s.territories || []).some((t) => t.level === "pincode" && geoFilter.pincodes.includes(t.value)),
+  const listingCreatorIds = new Set(listings.map((l) => creatorId(l)).filter(Boolean));
+  const shownSupervisors = supervisors.filter(
+    (s) =>
+      listingCreatorIds.has(s._id) ||
+      (s.territories || []).some((t) => t.level === "pincode" && geoFilter.pincodes.includes(t.value)),
   );
 
   useEffect(() => {
