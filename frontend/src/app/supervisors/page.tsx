@@ -191,12 +191,16 @@ export default function SupervisorsPage() {
     try {
       const id = pwTarget._id;
       await supervisorService.setPassword(id, newPassword);
-      // Update that card's viewable password immediately and reveal it.
-      setSupervisors((prev) => prev.map((s) => (s._id === id ? { ...s, viewPassword: newPassword } : s)));
-      setRevealPw((p) => ({ ...p, [id]: true }));
       setPwTarget(null);
       setNewPassword("");
       flash("Password updated");
+      // Show the per-card spinner briefly, then reveal the new password.
+      setBusyId(id);
+      setTimeout(() => {
+        setSupervisors((prev) => prev.map((s) => (s._id === id ? { ...s, viewPassword: newPassword } : s)));
+        setRevealPw((p) => ({ ...p, [id]: true }));
+        setBusyId((b) => (b === id ? null : b));
+      }, 2000);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to set password");
     } finally {
