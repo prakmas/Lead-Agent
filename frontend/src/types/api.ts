@@ -119,6 +119,7 @@ export type Listing = {
   contactName?: string;
   contactPhone?: string;
   metadata?: { country?: string; state?: string; city?: string; area?: string; pincode?: string };
+  createdBy?: { _id: string; name?: string; email?: string } | string | null;
   status: string;
   createdAt: string;
 };

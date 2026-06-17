@@ -78,7 +78,37 @@ export function TerritoryEditor({ value, onChange }: { value: Territory[]; onCha
         <p className="text-xs text-slate-400">No areas yet — search a state/city or add a pincode below.</p>
       )}
 
-      {/* Search state/city */}
+      {/* Add pincode (primary / recommended) */}
+      <div className="flex h-9 items-center gap-2 rounded-md border border-slate-300 px-2.5 focus-within:border-teal-600">
+        <span className="text-[11px] font-semibold text-slate-400">PIN</span>
+        <input
+          value={pin}
+          onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 6))}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && pin.length === 6) {
+              add({ level: "pincode", value: pin });
+              setPin("");
+            }
+          }}
+          inputMode="numeric"
+          placeholder="Add 6-digit pincode (recommended)"
+          className="h-8 flex-1 text-sm outline-none"
+        />
+        <button
+          type="button"
+          disabled={pin.length !== 6}
+          onClick={() => {
+            add({ level: "pincode", value: pin });
+            setPin("");
+          }}
+          className="inline-flex h-7 items-center gap-1 rounded-md bg-slate-900 px-2 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-40"
+        >
+          <Plus size={13} /> Add
+        </button>
+      </div>
+      <p className="text-[11px] text-slate-400">Pincode keeps an area small &amp; manageable. Multiple supervisors can share a pincode.</p>
+
+      {/* Or a broader area: search state/city */}
       <div className="relative">
         <div className="flex h-9 items-center gap-2 rounded-md border border-slate-300 px-2.5 focus-within:border-teal-600">
           <Search size={14} className="text-slate-400" />
@@ -87,7 +117,7 @@ export function TerritoryEditor({ value, onChange }: { value: Territory[]; onCha
             onChange={(e) => setQ(e.target.value)}
             onFocus={() => results.length > 0 && setOpen(true)}
             onBlur={() => setTimeout(() => setOpen(false), 150)}
-            placeholder="Search a state or city…"
+            placeholder="Or a broader area — search state/city…"
             className="h-8 flex-1 text-sm outline-none"
           />
         </div>
@@ -113,35 +143,6 @@ export function TerritoryEditor({ value, onChange }: { value: Territory[]; onCha
             ))}
           </ul>
         ) : null}
-      </div>
-
-      {/* Add pincode */}
-      <div className="flex h-9 items-center gap-2 rounded-md border border-slate-300 px-2.5 focus-within:border-teal-600">
-        <span className="text-[11px] font-semibold text-slate-400">PIN</span>
-        <input
-          value={pin}
-          onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 6))}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && pin.length === 6) {
-              add({ level: "pincode", value: pin });
-              setPin("");
-            }
-          }}
-          inputMode="numeric"
-          placeholder="6-digit pincode"
-          className="h-8 flex-1 text-sm outline-none"
-        />
-        <button
-          type="button"
-          disabled={pin.length !== 6}
-          onClick={() => {
-            add({ level: "pincode", value: pin });
-            setPin("");
-          }}
-          className="inline-flex h-7 items-center gap-1 rounded-md bg-slate-900 px-2 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-40"
-        >
-          <Plus size={13} /> Add
-        </button>
       </div>
     </div>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle, ImageOff, Pencil, Plus, RefreshCw, Trash2, X } from "lucide-react";
+import { CheckCircle, ImageOff, Lock, Pencil, Plus, RefreshCw, Trash2, UserRound, X } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { CategorySelect, type CategoryGroup } from "@/components/CategorySelect";
@@ -9,9 +9,10 @@ import { PageLoader } from "@/components/Loader";
 import { LocationPicker, type LocationValue } from "@/components/LocationPicker";
 import { MapPicker, type GeoValue } from "@/components/MapPicker";
 import { PageHeader } from "@/components/PageHeader";
-import { listingService } from "@/lib/api";
+import { listingService, supervisorService } from "@/lib/api";
+import { getAdmin } from "@/lib/auth";
 import { dataUrlToThumb } from "@/lib/image";
-import type { Listing } from "@/types/api";
+import type { Listing, Supervisor } from "@/types/api";
 
 // A broad, real-world catalogue of categories grouped for an easy dropdown.
 // `value` is a stable lowercase slug stored on the listing; `label` is shown.
@@ -234,16 +235,36 @@ export default function ListingsPage() {
   const [images, setImages] = useState<string[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [loadingList, setLoadingList] = useState(true);
+  const [creatorFilter, setCreatorFilter] = useState("");
+  const [supervisors, setSupervisors] = useState<Supervisor[]>([]);
+
+  const me = getAdmin();
+  const isOwner = me?.role === "owner" || me?.role === "admin";
+  const creatorId = (l: Listing) =>
+    typeof l.createdBy === "object" && l.createdBy ? l.createdBy._id : (l.createdBy as string | undefined);
+  const creatorName = (l: Listing) =>
+    typeof l.createdBy === "object" && l.createdBy ? l.createdBy.name || l.createdBy.email : null;
+  // A supervisor may only edit/delete listings they created; the owner edits all.
+  const canManage = (l: Listing) => isOwner || (!!me && creatorId(l) === me.id);
 
   const loadListings = useCallback(async () => {
     setLoadingList(true);
     try {
-      const result = await listingService.list();
+      const result = await listingService.list({ createdBy: creatorFilter || undefined });
       setListings(result.data);
     } finally {
       setLoadingList(false);
     }
-  }, []);
+  }, [creatorFilter]);
+
+  // Owner gets a "filter by supervisor" dropdown.
+  useEffect(() => {
+    if (!isOwner) return;
+    supervisorService
+      .list()
+      .then((r) => setSupervisors(r.data))
+      .catch(() => {});
+  }, [isOwner]);
 
   useEffect(() => {
     loadListings().catch((err) => setError(err.message));
@@ -407,13 +428,30 @@ export default function ListingsPage() {
 
         {/* ── Inventory ── */}
         <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
-          <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-4 py-3">
             <h2 className="text-sm font-semibold text-slate-950">
               Active inventory <span className="ml-1 text-xs font-normal text-slate-400">({listings.length})</span>
             </h2>
-            <button type="button" onClick={() => loadListings().catch((err) => setError(err.message))} className="inline-flex h-8 items-center gap-2 rounded-md border border-slate-300 px-2 text-xs font-medium hover:bg-slate-50">
-              <RefreshCw size={14} /> Refresh
-            </button>
+            <div className="flex items-center gap-2">
+              {isOwner ? (
+                <select
+                  value={creatorFilter}
+                  onChange={(e) => setCreatorFilter(e.target.value)}
+                  className="h-8 rounded-md border border-slate-300 px-2 text-xs text-slate-600 outline-none focus:border-teal-600"
+                  title="Filter by supervisor"
+                >
+                  <option value="">All supervisors</option>
+                  {supervisors.map((s) => (
+                    <option key={s._id} value={s._id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              ) : null}
+              <button type="button" onClick={() => loadListings().catch((err) => setError(err.message))} className="inline-flex h-8 items-center gap-2 rounded-md border border-slate-300 px-2 text-xs font-medium hover:bg-slate-50">
+                <RefreshCw size={14} /> Refresh
+              </button>
+            </div>
           </div>
 
           {loadingList ? (
@@ -440,12 +478,20 @@ export default function ListingsPage() {
                     <div className="flex items-start justify-between gap-2">
                       <h3 className="truncate font-semibold text-slate-950">{listing.title}</h3>
                       <div className="flex shrink-0 items-center gap-1.5">
-                        <button type="button" onClick={() => startEdit(listing._id).catch((err) => setError(err.message))} title="Edit" className="text-slate-400 hover:text-teal-700">
-                          <Pencil size={14} />
-                        </button>
-                        <button type="button" onClick={() => deleteListing(listing._id).catch((err) => setError(err.message))} title="Delete" className="text-slate-400 hover:text-red-600">
-                          <Trash2 size={14} />
-                        </button>
+                        {canManage(listing) ? (
+                          <>
+                            <button type="button" onClick={() => startEdit(listing._id).catch((err) => setError(err.message))} title="Edit" className="text-slate-400 hover:text-teal-700">
+                              <Pencil size={14} />
+                            </button>
+                            <button type="button" onClick={() => deleteListing(listing._id).catch((err) => setError(err.message))} title="Delete" className="text-slate-400 hover:text-red-600">
+                              <Trash2 size={14} />
+                            </button>
+                          </>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-400" title="Created by another supervisor — view only">
+                            <Lock size={10} /> View only
+                          </span>
+                        )}
                       </div>
                     </div>
                     {listing.description ? <p className="mt-0.5 line-clamp-1 text-sm text-slate-600">{listing.description}</p> : null}
@@ -455,6 +501,11 @@ export default function ListingsPage() {
                       {listing.budget ? <span>₹{listing.budget.toLocaleString()}</span> : null}
                       {listing.contactPhone ? <span>📞 {listing.contactPhone}</span> : null}
                       {listing.geo?.lat ? <span className="text-teal-600">📍 pinned</span> : null}
+                      {creatorName(listing) ? (
+                        <span className="inline-flex items-center gap-1 text-slate-400">
+                          <UserRound size={11} /> {creatorName(listing)}
+                        </span>
+                      ) : null}
                     </div>
                   </div>
                 </article>
