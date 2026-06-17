@@ -11,14 +11,19 @@ const SAMPLES = [
     email: "ravi@crr.local",
     isActive: true,
     permissions: { dashboard: "view", leads: "manage", inbox: "manage", listings: "manage", matches: "view", settings: "none" },
-    territories: [{ level: "city", value: "Nellore" }],
+    // Pincode-based territory: Kaluvoya (524343) + Nellore town (524004).
+    territories: [
+      { level: "pincode", value: "524343" },
+      { level: "pincode", value: "524004" },
+    ],
   },
   {
     name: "Priya Sharma",
     email: "priya@crr.local",
     isActive: true,
     permissions: { dashboard: "view", leads: "view", inbox: "none", listings: "manage", matches: "view", settings: "none" },
-    territories: [{ level: "state", value: "Andhra Pradesh" }],
+    // Brodipet, Guntur (522002).
+    territories: [{ level: "pincode", value: "522002" }],
   },
   {
     name: "Arjun Rao",

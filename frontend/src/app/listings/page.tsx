@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle, ImageOff, Lock, Pencil, Plus, RefreshCw, Trash2, UserRound, X } from "lucide-react";
+import { AlertCircle, CheckCircle, ImageOff, Lock, Pencil, Plus, RefreshCw, Trash2, UserRound, X } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { CategorySelect, type CategoryGroup } from "@/components/CategorySelect";
@@ -303,17 +303,11 @@ export default function ListingsPage() {
       .catch(() => {});
   }, [isOwner]);
 
-  // Supervisor badges appear ONLY after a pincode is selected, and show the
-  // supervisors who cover it (matched by pincode, or by the district/state the
-  // pincode sits in — from the cascade context).
+  // Supervisor badges appear ONLY after a pincode is selected, and show ONLY the
+  // supervisors assigned to that exact pincode.
   const showSupervisorBadges = isOwner && geoFilter.pincodes.length > 0;
   const shownSupervisors = supervisors.filter((s) =>
-    (s.territories || []).some(
-      (t) =>
-        (t.level === "pincode" && geoFilter.pincodes.includes(t.value)) ||
-        (t.level === "city" && t.value === geoFilter.district) ||
-        (t.level === "state" && t.value === geoFilter.state),
-    ),
+    (s.territories || []).some((t) => t.level === "pincode" && geoFilter.pincodes.includes(t.value)),
   );
 
   useEffect(() => {
@@ -496,7 +490,9 @@ export default function ListingsPage() {
               <div className="flex flex-wrap items-center gap-1.5">
                 <span className="text-[11px] font-semibold text-slate-500">Supervisors:</span>
                 {shownSupervisors.length === 0 ? (
-                  <span className="text-[11px] italic text-slate-400">No supervisor covers this pincode.</span>
+                  <span className="inline-flex items-center gap-1 rounded-md bg-red-50 px-2 py-1 text-[11px] font-semibold text-red-600 ring-1 ring-red-200">
+                    <AlertCircle size={12} /> No supervisor registered for this pincode yet
+                  </span>
                 ) : (
                   <>
                   <button
