@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle, ImageOff, Lock, Pencil, Plus, RefreshCw, Trash2, UserRound, X } from "lucide-react";
+import { CheckCircle, ImageOff, Lock, MapPin, Pencil, Plus, RefreshCw, Trash2, UserRound, X } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { CategorySelect, type CategoryGroup } from "@/components/CategorySelect";
@@ -214,6 +214,28 @@ const CATEGORY_GROUPS: CategoryGroup[] = [
   ]],
 ];
 
+// Colors cycled across supervisor filter badges.
+const BADGE_COLORS = [
+  "bg-violet-50 text-violet-700 ring-violet-200",
+  "bg-sky-50 text-sky-700 ring-sky-200",
+  "bg-emerald-50 text-emerald-700 ring-emerald-200",
+  "bg-amber-50 text-amber-700 ring-amber-200",
+  "bg-rose-50 text-rose-700 ring-rose-200",
+  "bg-cyan-50 text-cyan-700 ring-cyan-200",
+  "bg-fuchsia-50 text-fuchsia-700 ring-fuchsia-200",
+  "bg-teal-50 text-teal-700 ring-teal-200",
+];
+const BADGE_ACTIVE = [
+  "bg-violet-600 text-white ring-violet-600",
+  "bg-sky-600 text-white ring-sky-600",
+  "bg-emerald-600 text-white ring-emerald-600",
+  "bg-amber-500 text-white ring-amber-500",
+  "bg-rose-600 text-white ring-rose-600",
+  "bg-cyan-600 text-white ring-cyan-600",
+  "bg-fuchsia-600 text-white ring-fuchsia-600",
+  "bg-teal-600 text-white ring-teal-600",
+];
+
 const EMPTY_FORM = {
   title: "",
   category: "flat",
@@ -236,6 +258,8 @@ export default function ListingsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [loadingList, setLoadingList] = useState(true);
   const [creatorFilter, setCreatorFilter] = useState("");
+  const [placeInput, setPlaceInput] = useState("");
+  const [placeFilter, setPlaceFilter] = useState("");
   const [supervisors, setSupervisors] = useState<Supervisor[]>([]);
 
   const me = getAdmin();
@@ -250,14 +274,23 @@ export default function ListingsPage() {
   const loadListings = useCallback(async () => {
     setLoadingList(true);
     try {
-      const result = await listingService.list({ createdBy: creatorFilter || undefined });
+      const result = await listingService.list({
+        createdBy: creatorFilter || undefined,
+        place: placeFilter || undefined,
+      });
       setListings(result.data);
     } finally {
       setLoadingList(false);
     }
-  }, [creatorFilter]);
+  }, [creatorFilter, placeFilter]);
 
-  // Owner gets a "filter by supervisor" dropdown.
+  // Debounce the place filter input.
+  useEffect(() => {
+    const t = setTimeout(() => setPlaceFilter(placeInput.trim()), 350);
+    return () => clearTimeout(t);
+  }, [placeInput]);
+
+  // Owner gets supervisor filter badges.
   useEffect(() => {
     if (!isOwner) return;
     supervisorService
@@ -428,30 +461,66 @@ export default function ListingsPage() {
 
         {/* ── Inventory ── */}
         <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-4 py-3">
-            <h2 className="text-sm font-semibold text-slate-950">
-              Active inventory <span className="ml-1 text-xs font-normal text-slate-400">({listings.length})</span>
-            </h2>
-            <div className="flex items-center gap-2">
-              {isOwner ? (
-                <select
-                  value={creatorFilter}
-                  onChange={(e) => setCreatorFilter(e.target.value)}
-                  className="h-8 rounded-md border border-slate-300 px-2 text-xs text-slate-600 outline-none focus:border-teal-600"
-                  title="Filter by supervisor"
-                >
-                  <option value="">All supervisors</option>
-                  {supervisors.map((s) => (
-                    <option key={s._id} value={s._id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
-              ) : null}
-              <button type="button" onClick={() => loadListings().catch((err) => setError(err.message))} className="inline-flex h-8 items-center gap-2 rounded-md border border-slate-300 px-2 text-xs font-medium hover:bg-slate-50">
-                <RefreshCw size={14} /> Refresh
-              </button>
+          <div className="space-y-2.5 border-b border-slate-200 px-4 py-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-sm font-semibold text-slate-950">
+                Active inventory <span className="ml-1 text-xs font-normal text-slate-400">({listings.length})</span>
+              </h2>
+              <div className="flex items-center gap-2">
+                {/* Flexible location filter: pincode / state / district / mandal / village */}
+                <div className="flex h-8 items-center gap-1.5 rounded-md border border-slate-300 px-2 focus-within:border-teal-600">
+                  <MapPin size={13} className="text-slate-400" />
+                  <input
+                    value={placeInput}
+                    onChange={(e) => setPlaceInput(e.target.value)}
+                    placeholder="Filter by pincode / state / district / village"
+                    className="h-7 w-64 text-xs outline-none"
+                  />
+                  {placeInput ? (
+                    <button type="button" onClick={() => setPlaceInput("")} className="text-slate-400 hover:text-slate-700">
+                      <X size={13} />
+                    </button>
+                  ) : null}
+                </div>
+                <button type="button" onClick={() => loadListings().catch((err) => setError(err.message))} className="inline-flex h-8 items-center gap-2 rounded-md border border-slate-300 px-2 text-xs font-medium hover:bg-slate-50">
+                  <RefreshCw size={14} /> Refresh
+                </button>
+              </div>
             </div>
+
+            {/* Colored supervisor filter badges (owner only) */}
+            {isOwner && supervisors.length > 0 ? (
+              <div className="flex flex-wrap items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setCreatorFilter("")}
+                  className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 transition ${
+                    creatorFilter === "" ? "bg-slate-800 text-white ring-slate-800" : "bg-white text-slate-600 ring-slate-300 hover:bg-slate-50"
+                  }`}
+                >
+                  All
+                </button>
+                {supervisors.map((s, i) => {
+                  const active = creatorFilter === s._id;
+                  const terr = (s.territories || []).map((t) => t.value).slice(0, 3).join(", ");
+                  return (
+                    <button
+                      key={s._id}
+                      type="button"
+                      onClick={() => setCreatorFilter(active ? "" : s._id)}
+                      title={terr ? `Territory: ${terr}` : "No territory assigned"}
+                      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 transition ${
+                        active ? BADGE_ACTIVE[i % BADGE_ACTIVE.length] : `${BADGE_COLORS[i % BADGE_COLORS.length]} hover:opacity-80`
+                      }`}
+                    >
+                      <UserRound size={11} />
+                      {s.name}
+                      {terr ? <span className="opacity-70">· {terr}</span> : null}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
           </div>
 
           {loadingList ? (
