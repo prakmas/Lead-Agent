@@ -124,14 +124,22 @@ export default function SupervisorsPage() {
     }
   };
 
+  // Show the per-card spinner briefly for nice feedback after a quick update.
+  const flashCardSpinner = (id: string) => {
+    setBusyId(id);
+    setTimeout(() => setBusyId((b) => (b === id ? null : b)), 1500);
+  };
+
   const saveAccess = async () => {
     if (!editing) return;
+    const id = editing._id;
     setSaving(true);
     try {
-      const res = await supervisorService.setPermissions(editing._id, editPerms);
+      const res = await supervisorService.setPermissions(id, editPerms);
       replaceOne(res.data);
       setEditing(null);
       flash("Access updated");
+      flashCardSpinner(id);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to update access");
     } finally {
@@ -141,12 +149,14 @@ export default function SupervisorsPage() {
 
   const saveTerritory = async () => {
     if (!terrTarget) return;
+    const id = terrTarget._id;
     setSaving(true);
     try {
-      const res = await supervisorService.setTerritories(terrTarget._id, terrValue);
+      const res = await supervisorService.setTerritories(id, terrValue);
       replaceOne(res.data);
       setTerrTarget(null);
       flash("Territory updated");
+      flashCardSpinner(id);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to update territory");
     } finally {
