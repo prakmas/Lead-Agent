@@ -4,6 +4,9 @@
 const env = {
   nodeEnv: process.env.NODE_ENV || "development",
   clientUrl: process.env.CLIENT_URL || "http://localhost:3000",
+  // Business contact shown to customers (e.g. when there's no match). Optional.
+  businessName: process.env.BUSINESS_NAME || "",
+  businessContact: process.env.BUSINESS_CONTACT || "",
   mongoUri: process.env.MONGODB_URI || process.env.ATLAS_URI,
   jwtSecret: process.env.JWT_SECRET || "dev-only-secret",
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || "7d",

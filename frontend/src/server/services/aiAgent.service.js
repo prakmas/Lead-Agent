@@ -70,13 +70,17 @@ export const buildMatchReply = (matches, requirements = {}) => {
   const where = requirements.location ? ` in ${requirements.location}` : "";
 
   if (!matches.length) {
+    const contactLine = env.businessContact
+      ? `\n📞 Want help faster? Call or WhatsApp our team at *${env.businessContact}* and we'll find it for you.\n`
+      : `\n📞 Reply "call me" and our team will reach out to help you personally.\n`;
     return (
       `Thanks! I've saved your requirement${where}. 📝\n` +
       `I couldn't find an exact match right now — no worries, this happens. 🙂\n\n` +
       `Here's what I can do:\n` +
       `• I'll keep searching and message you the moment something fits 🔔\n` +
-      `• Or reply with a *nearby area* / *higher budget* and I'll look again right away\n\n` +
-      `Reply "stop" anytime to pause updates.`
+      `• Or reply with a *nearby area* / *higher budget* and I'll look again right away\n` +
+      contactLine +
+      `\nReply "stop" anytime to pause updates.`
     );
   }
 
