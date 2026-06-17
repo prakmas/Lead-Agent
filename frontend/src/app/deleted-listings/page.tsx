@@ -1,6 +1,6 @@
 "use client";
 
-import { ImageOff, RotateCcw, Trash2, UserRound } from "lucide-react";
+import { ImageOff, RotateCcw, Shield, Trash2, UserRound } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { ListingFilters, EMPTY_GEO, type GeoFilter } from "@/components/ListingFilters";
@@ -88,8 +88,6 @@ export default function DeletedListingsPage() {
 
   const creatorName = (l: Listing) =>
     typeof l.createdBy === "object" && l.createdBy ? l.createdBy.name || l.createdBy.email : null;
-  const deleterName = (l: Listing) =>
-    typeof l.deletedBy === "object" && l.deletedBy ? l.deletedBy.name || l.deletedBy.email : null;
 
   return (
     <AppShell>
@@ -142,23 +140,37 @@ export default function DeletedListingsPage() {
                 <div className="min-w-0 flex-1">
                   <div className="flex items-start justify-between gap-2">
                     <h3 className="truncate font-semibold text-slate-950">{listing.title}</h3>
-                    <div className="flex shrink-0 items-center gap-1.5">
-                      <button type="button" onClick={() => restore(listing)} title="Restore" className="inline-flex h-7 items-center gap-1 rounded-md border border-emerald-300 px-2 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-50">
-                        <RotateCcw size={12} /> Restore
-                      </button>
-                      <button type="button" onClick={() => purge(listing)} title="Delete permanently" className="text-slate-400 hover:text-red-600">
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
+                    {/* Restore / permanent delete — owner only */}
+                    {isOwner ? (
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        <button type="button" onClick={() => restore(listing)} title="Restore" className="inline-flex h-7 items-center gap-1 rounded-md border border-emerald-300 px-2 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-50">
+                          <RotateCcw size={12} /> Restore
+                        </button>
+                        <button type="button" onClick={() => purge(listing)} title="Delete permanently" className="text-slate-400 hover:text-red-600">
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    ) : null}
                   </div>
 
-                  <div className="mt-1 rounded-md bg-red-50 px-2 py-1 text-xs text-red-700 ring-1 ring-red-100">
+                  <div className="mt-1 flex flex-wrap items-center gap-1.5 rounded-md bg-red-50 px-2 py-1 text-xs text-red-700 ring-1 ring-red-100">
                     <span className="font-semibold">Deleted</span>
-                    {listing.deleteReason ? <> — {listing.deleteReason}</> : <> — no reason given</>}
-                    <span className="text-red-400">
-                      {listing.deletedAt ? ` · ${new Date(listing.deletedAt).toLocaleDateString()}` : ""}
-                      {deleterName(listing) ? ` by ${deleterName(listing)}` : ""}
-                    </span>
+                    <span>{listing.deleteReason ? `— ${listing.deleteReason}` : "— no reason given"}</span>
+                    {listing.deletedAt ? <span className="text-red-400">· {new Date(listing.deletedAt).toLocaleDateString()}</span> : null}
+                    <span className="text-red-400">by</span>
+                    {(() => {
+                      const d = typeof listing.deletedBy === "object" ? listing.deletedBy : null;
+                      const byAdmin = !d || d.role === "owner" || d.role === "admin";
+                      return byAdmin ? (
+                        <span className="inline-flex items-center gap-1 rounded bg-slate-900 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                          <Shield size={10} /> Admin
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-bold text-indigo-700">
+                          <UserRound size={10} /> {d.name || d.email}
+                        </span>
+                      );
+                    })()}
                   </div>
 
                   {listing.services ? <p className="mt-1 line-clamp-2 text-sm text-slate-600">{listing.services}</p> : null}
