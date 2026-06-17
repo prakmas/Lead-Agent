@@ -11,22 +11,24 @@ const PLAN = [
     email: "ravi@crr.local",
     base: { state: "Andhra Pradesh", city: "Nellore", area: "Kaluvoya", pincode: "524343" },
     items: [
-      { title: "Sri Sai Provision Store", category: "supermarket", budget: null },
-      { title: "Kaluvoya 2BHK Flat", category: "flat", budget: 12000 },
-      { title: "Lakshmi Tiffin Center", category: "tiffin", budget: null },
+      { title: "Sri Sai Provision Store", category: "supermarket", budget: null, ownerName: "Srinivas Reddy", ownerPhone: "9885011111", address: "Main Road, Kaluvoya", landmark: "opposite temple", timings: "Daily 7am–10pm", services: "Groceries, daily essentials, fresh produce, recharge & bill payments" },
+      { title: "Kaluvoya 2BHK Flat", category: "flat", budget: 12000, ownerName: "Lakshmi Devi", ownerPhone: "9885022222", address: "2nd Cross, Kaluvoya", landmark: "beside SBI ATM", timings: "Visit 10am–6pm", services: "2BHK semi-furnished flat for family, 24x7 water, car parking" },
+      { title: "Lakshmi Tiffin Center", category: "tiffin", budget: null, ownerName: "Padma", ownerPhone: "9885033333", address: "Bus Stand Road, Kaluvoya", landmark: "near RTC complex", timings: "Mon–Sat 6am–10am, 6pm–9pm", services: "Idli, dosa, vada, meals; monthly tiffin & home delivery" },
     ],
   },
   {
     email: "ravi@crr.local",
     base: { state: "Andhra Pradesh", city: "Nellore", area: "Nellore", pincode: "524004" },
-    items: [{ title: "Nellore Hardware & Electricals", category: "electrician", budget: null }],
+    items: [
+      { title: "Nellore Hardware & Electricals", category: "electrician", budget: null, ownerName: "Mohan Rao", ownerPhone: "9885044444", address: "Trunk Road, Nellore", landmark: "opposite bus stand", timings: "Mon–Sat 9am–9pm", services: "Electrical fittings, wiring, motor repair, switches & fans, on-call electrician" },
+    ],
   },
   {
     email: "priya@crr.local",
     base: { state: "Andhra Pradesh", city: "Guntur", area: "Brodipet", pincode: "522002" },
     items: [
-      { title: "Brodipet Single Room", category: "room", budget: 6500 },
-      { title: "Guntur Mobile Repairs", category: "mobilerepair", budget: null },
+      { title: "Brodipet Single Room", category: "room", budget: 6500, ownerName: "Anjali", ownerPhone: "9885055555", address: "5th Line, Brodipet, Guntur", landmark: "near Arundelpet", timings: "Visit anytime", services: "Single room for students/bachelors, attached bath, 24x7 water" },
+      { title: "Guntur Mobile Repairs", category: "mobilerepair", budget: null, ownerName: "Rahul", ownerPhone: "9885066666", address: "Brodipet Main Road, Guntur", landmark: "beside Big Bazaar", timings: "Mon–Sun 10am–9pm", services: "Mobile screen replacement, battery, software, all brands; accessories" },
     ],
   },
 ];
@@ -50,6 +52,17 @@ const seed = async () => {
         location: `${group.base.area}, ${group.base.city}`,
         status: "active",
         createdBy: sup._id,
+        // Business registration details (as a supervisor would capture on-site)
+        ownerName: it.ownerName,
+        ownerPhone: it.ownerPhone,
+        contactName: it.ownerName,
+        contactPhone: it.ownerPhone,
+        phoneVerified: true,
+        address: it.address,
+        landmark: it.landmark,
+        timings: it.timings,
+        services: it.services,
+        mapLink: `https://maps.google.com/?q=${encodeURIComponent(`${it.title}, ${group.base.area}`)}`,
         metadata: { ...group.base, country: "India", seededFor: group.email },
       });
       created++;

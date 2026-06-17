@@ -571,7 +571,7 @@ export default function ListingsPage() {
         </form>
 
         {/* ── Inventory ── */}
-        <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
+        <section className="rounded-lg border border-slate-200 bg-white shadow-sm xl:sticky xl:top-6 xl:self-start">
           <div className="space-y-2.5 border-b border-slate-200 px-4 py-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 className="text-sm font-semibold text-slate-950">
@@ -639,9 +639,9 @@ export default function ListingsPage() {
           ) : listings.length === 0 ? (
             <p className="px-4 py-6 text-sm text-slate-500">No listings yet — create one.</p>
           ) : (
-            <div className="divide-y divide-slate-100">
+            <div className="max-h-[calc(100vh-15rem)] divide-y divide-slate-100 overflow-y-auto">
               {listings.map((listing) => (
-                <article key={listing._id} className="flex gap-3 px-4 py-3">
+                <article key={listing._id} className="flex gap-3 px-4 py-4">
                   {/* cover thumb */}
                   <div className="h-16 w-16 shrink-0 overflow-hidden rounded-md border border-slate-200 bg-slate-50">
                     {listing.coverThumb ? (
