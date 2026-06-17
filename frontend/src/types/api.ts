@@ -30,6 +30,10 @@ export type Contact = {
   username?: string;
   externalId: string;
   channelType: ChannelType;
+  tags?: string[];
+  profile?: { notes?: string; [key: string]: unknown };
+  lastSeenAt?: string;
+  createdAt?: string;
 };
 
 export type Lead = {
@@ -60,6 +64,8 @@ export type Conversation = {
   lastMessage?: string;
   lastMessageAt?: string;
   unreadCount: number;
+  metadata?: { botEnabled?: boolean; [key: string]: unknown };
+  createdAt?: string;
 };
 
 export type Message = {
@@ -67,6 +73,8 @@ export type Message = {
   direction: "inbound" | "outbound";
   text: string;
   messageType: string;
+  status?: string;
+  metadata?: { source?: string; [key: string]: unknown };
   createdAt: string;
 };
 

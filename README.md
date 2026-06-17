@@ -59,7 +59,7 @@ CRR/
 │   ├── railway.json             Railway deploy config
 │   └── scripts/railway-setenv.sh
 ├── DEPLOY.md                    Railway deployment guide
-├── META_KEYS_SETUP.md           how to get the Meta/WhatsApp keys
+├── SETUP_KEYS.md                complete setup: every API key & credential, step by step
 └── start-realtime.sh            local: app + public tunnel for live testing
 ```
 
@@ -98,7 +98,7 @@ AI_PROVIDER=gemini                # or: openai | claude | mock
 GEMINI_API_KEY=your_gemini_key
 GEMINI_MODEL=gemini-2.5-flash
 
-# WhatsApp (leave blank for local mock/dry-run; see META_KEYS_SETUP.md)
+# WhatsApp (leave blank for local mock/dry-run; see SETUP_KEYS.md)
 WHATSAPP_PHONE_NUMBER_ID=
 WHATSAPP_ACCESS_TOKEN=
 META_VERIFY_TOKEN=make-a-long-random-string
@@ -154,7 +154,7 @@ curl -X POST http://localhost:3000/api/webhooks/simulate \
 
 It prints the **Callback URL** (`https://<tunnel>/api/webhooks/meta`) and the
 **verify token** to paste into Meta → WhatsApp → Configuration → Webhook. See
-[META_KEYS_SETUP.md](META_KEYS_SETUP.md) for getting the keys.
+[SETUP_KEYS.md](SETUP_KEYS.md) for getting the keys.
 
 > The tunnel URL changes each run. For a **permanent** URL, deploy to Railway —
 > see [DEPLOY.md](DEPLOY.md).

@@ -5,20 +5,42 @@ import Conversation from "../models/Conversation.js";
 import Lead from "../models/Lead.js";
 import Match from "../models/Match.js";
 import Message from "../models/Message.js";
-import { analyzeRequirement, buildFollowUpQuestion, buildMatchReply } from "./aiAgent.service.js";
+import { analyzeRequirement, buildAck, buildFollowUpQuestion, buildMatchReply, buildWelcomeMenu } from "./aiAgent.service.js";
 import { markMatchesSent, scheduleFollowUp } from "./followUp.service.js";
 import { findMatchesForLead } from "./matching.service.js";
 import { sendMessage } from "./messaging.service.js";
 import {
   applyPendingAnswer,
+  classifyConversationIntent,
   computeMissingFields,
   getPrimaryMissingField,
+  SERVICE_MENU,
 } from "../utils/requirements.js";
 
 const channelName = {
   whatsapp: "WhatsApp Business",
   instagram: "Instagram DM",
   facebook: "Facebook Messenger",
+};
+
+// Quick-pick budget ranges (the numbered options shown in the budget question).
+const BUDGET_PICKS = { 1: 10000, 2: 20000, 3: 35000, 4: 100000 };
+
+// Resolve a 6-digit Indian pincode to its area/district via the free India Post
+// API — lets a customer type a short pincode instead of spelling out an area.
+const resolvePincode = async (pin) => {
+  try {
+    const res = await fetch(`https://api.postalpincode.in/pincode/${pin}`, {
+      headers: { Accept: "application/json" },
+    });
+    const body = await res.json();
+    const block = body?.[0];
+    if (block?.Status !== "Success" || !block.PostOffice?.length) return null;
+    const po = block.PostOffice.find((p) => p.DeliveryStatus === "Delivery") || block.PostOffice[0];
+    return { area: po.Name, district: po.District, state: po.State, pincode: pin };
+  } catch {
+    return null;
+  }
 };
 
 const mergeRequirements = (existing = {}, incoming = {}) => ({
@@ -137,6 +159,87 @@ export const processInboundMessage = async (commonMessage) => {
   const conversation = await getOrCreateConversation(commonMessage, channel, contact);
   await saveInboundMessage(commonMessage, channel, contact, conversation);
 
+  // Bot can be switched off per-conversation from the admin Inbox. When off, we
+  // still record the inbound message (so the admin sees it) but do NOT auto-reply
+  // — a human replies manually instead.
+  if (conversation.metadata?.botEnabled === false) {
+    return { conversation, lead: conversation.lead || null, reply: null, matches: [], botSkipped: true };
+  }
+
+  // Guided menu: if we just showed the numbered service menu, map a numeric pick
+  // (e.g. "4") to its category so it flows into a fresh search.
+  if (conversation.metadata?.flowStage === "menu") {
+    const m = commonMessage.message.trim().match(/^([1-9])$/);
+    if (m && SERVICE_MENU[Number(m[1]) - 1]) {
+      commonMessage = { ...commonMessage, message: SERVICE_MENU[Number(m[1]) - 1].key };
+    }
+    conversation.metadata = { ...conversation.metadata, flowStage: null };
+    conversation.markModified("metadata");
+  }
+
+  // A standalone 6-digit number = an Indian pincode. Resolve it to its area so
+  // the customer can type "560034" instead of spelling "Koramangala".
+  if (/^\d{6}$/.test(commonMessage.message.trim())) {
+    const resolved = await resolvePincode(commonMessage.message.trim());
+    if (resolved?.area) {
+      commonMessage = { ...commonMessage, message: resolved.area };
+    }
+  }
+
+  // ── Conversation flow: greet / thank / hand off BEFORE any lead or search ────
+  // This is what makes the bot feel human — "hi" gets a welcome, not 5 listings.
+  const convIntent = classifyConversationIntent(commonMessage.message);
+
+  // Human handoff: stop auto-replies for this chat so a person can take over.
+  if (convIntent === "handoff") {
+    conversation.metadata = { ...conversation.metadata, botEnabled: false, handoffRequested: true };
+    conversation.markModified("metadata");
+    const reply =
+      "Sure — I'll have a team member reach out to you shortly. 🙌\n" +
+      "Meanwhile, feel free to share what you're looking for (type, location and budget) so we can help you faster.";
+    conversation.status = "open";
+    conversation.lastMessage = reply;
+    conversation.lastMessageAt = new Date();
+    await conversation.save();
+    const sendResult = await sendMessage({ channel: commonMessage.channel, to: commonMessage.contactId, text: reply });
+    await saveOutboundMessage(reply, channel, contact, conversation, sendResult);
+    return { conversation, lead: conversation.lead || null, reply, matches: [], intent: "handoff" };
+  }
+
+  // Greeting / thanks — only when we're NOT mid-question (so a one-word answer to
+  // "Which location?" isn't mistaken for small talk).
+  if (conversation.status !== "waiting" && (convIntent === "greeting" || convIntent === "end")) {
+    let reply;
+    if (convIntent === "greeting") {
+      reply = buildWelcomeMenu();
+      conversation.metadata = { ...conversation.metadata, flowStage: "menu" };
+      conversation.markModified("metadata");
+    } else {
+      reply = "You're welcome! 😊 Whenever you need a place, a roommate, or a service, just message me here. Have a great day!";
+    }
+    conversation.lastMessage = reply;
+    conversation.lastMessageAt = new Date();
+    await conversation.save();
+    const sendResult = await sendMessage({ channel: commonMessage.channel, to: commonMessage.contactId, text: reply });
+    await saveOutboundMessage(reply, channel, contact, conversation, sendResult);
+    return { conversation, lead: conversation.lead || null, reply, matches: [], intent: convIntent };
+  }
+
+  // Customer picked an option ("1", "2"…) after seeing matches — treat it as
+  // interest and offer to connect them, instead of re-running the search.
+  if (conversation.status === "matched" && /^[1-9]$/.test(commonMessage.message.trim())) {
+    const reply =
+      `Great choice! 👍 I've noted your interest in option ${commonMessage.message.trim()}.\n` +
+      `Our team will share more details and reach out to you shortly. 🙌\n\n` +
+      `Would you like to see more options too? Reply "more" anytime.`;
+    conversation.lastMessage = reply;
+    conversation.lastMessageAt = new Date();
+    await conversation.save();
+    const sendResult = await sendMessage({ channel: commonMessage.channel, to: commonMessage.contactId, text: reply });
+    await saveOutboundMessage(reply, channel, contact, conversation, sendResult);
+    return { conversation, lead: conversation.lead || null, reply, matches: [], intent: "select" };
+  }
+
   const analysis = await analyzeRequirement({ message: commonMessage.message, conversation });
 
   let lead = conversation.lead ? await Lead.findById(conversation.lead) : null;
@@ -152,7 +255,7 @@ export const processInboundMessage = async (commonMessage) => {
   // ── continue ─────────────────────────────────────────────────────────────────
   if (analysis.intent === "continue" && lead) {
     const moreMatches = await handleContinue({ lead });
-    const reply = buildMatchReply(moreMatches);
+    const reply = buildMatchReply(moreMatches, lead.requirements);
     const sendResult = await sendMessage({ channel: commonMessage.channel, to: commonMessage.contactId, text: reply });
     await saveOutboundMessage(reply, channel, contact, conversation, sendResult);
     if (moreMatches.length) await markMatchesSent(moreMatches);
@@ -161,26 +264,56 @@ export const processInboundMessage = async (commonMessage) => {
 
   // ── create / update lead ──────────────────────────────────────────────────────
 
-  // If we asked a follow-up question last turn, interpret this reply as its
-  // answer (e.g. a bare "Nellore" answering "which location?").
+  // Snapshot what we knew before, to acknowledge newly captured details.
+  // (Read fields explicitly — spreading a Mongoose subdoc doesn't copy paths.)
+  const leadExisted = !!lead;
+  const hadLocation = !!lead?.requirements?.location;
+  const hadCategory = !!(lead?.requirements?.category && lead.requirements.category !== "general");
+  const hadBudget = !!lead?.requirements?.budgetMax;
+
+  // Which field did we last ask about? (hint for routing one-word place names.)
   let awaitingField = lead?.metadata?.awaitingField || null;
-  // Fallback for conversations that were already waiting before awaitingField
-  // was tracked: derive it from the lead's current missing fields.
   if (!awaitingField && lead && conversation.status === "waiting" && lead.missingFields?.length) {
     awaitingField = getPrimaryMissingField(lead.missingFields);
   }
-  if (awaitingField) {
-    analysis.requirements = applyPendingAnswer(
-      awaitingField,
-      commonMessage.message,
-      analysis.requirements,
-    );
+  // Budget quick-pick: if we asked for budget and they tapped 1–4, map it to a
+  // range so they don't have to type an amount.
+  const trimmedMsg = commonMessage.message.trim();
+  if (awaitingField === "budget" && /^[1-4]$/.test(trimmedMsg)) {
+    analysis.requirements = analysis.requirements || {};
+    if (!analysis.requirements.budgetMax) analysis.requirements.budgetMax = BUDGET_PICKS[trimmedMsg];
   }
+
+  // Route the message content into the right slots (handles bare "Nellore",
+  // "Flat", "12000" — even after a greeting, and even if we asked a different
+  // question). Only fills empty fields.
+  analysis.requirements = applyPendingAnswer(
+    awaitingField,
+    commonMessage.message,
+    analysis.requirements,
+  );
 
   // Don't let a vague "general" category overwrite a category we already know.
   if (analysis.requirements?.category === "general") {
     delete analysis.requirements.category;
   }
+
+  // New-search detection: if the customer names a DIFFERENT category than the
+  // current lead (e.g. switches from "rent a flat" to "roommate"), treat it as a
+  // fresh request — drop the old location/budget so we ask again instead of
+  // silently reusing the previous Nellore/₹12000.
+  const incomingCategory = analysis.requirements?.category;
+  const thisMsgHasLocation = !!analysis.requirements?.location;
+  const thisMsgHasBudget = !!analysis.requirements?.budgetMax;
+  const isNewSearch =
+    leadExisted &&
+    incomingCategory &&
+    incomingCategory !== "general" &&
+    // (a) they named a different service than before, OR
+    ((lead.category && lead.category !== "general" && incomingCategory !== lead.category) ||
+      // (b) they re-stated a service (with no new location/budget) after results
+      //     were already shown — i.e. they're starting over.
+      (!thisMsgHasLocation && !thisMsgHasBudget && conversation.status === "matched"));
 
   if (!lead) {
     lead = await Lead.create({
@@ -195,6 +328,15 @@ export const processInboundMessage = async (commonMessage) => {
       status: "New",
     });
     conversation.lead = lead._id;
+  } else if (isNewSearch) {
+    // Fresh requirement — keep only what this message actually provided.
+    lead.title = analysis.title || lead.title;
+    lead.intent = analysis.intent || lead.intent;
+    lead.requirements = { ...analysis.requirements };
+    lead.category = incomingCategory;
+    lead.metadata = { ...lead.metadata, awaitingField: null };
+    lead.markModified("requirements");
+    lead.markModified("metadata");
   } else {
     lead.title = analysis.title || lead.title;
     lead.intent = analysis.intent || lead.intent;
@@ -207,6 +349,25 @@ export const processInboundMessage = async (commonMessage) => {
   lead.missingFields = computeMissingFields(lead.requirements);
   lead.status = lead.missingFields.length ? "Contacted" : "Qualified";
 
+  // Acknowledge a newly captured detail (only mid-conversation, not first msg).
+  const categoryLabel = {
+    flat: "flat", pg: "PG", room: "room", roommate: "roommate", house: "house",
+    hotel: "hotel", supermarket: "supermarket", rental: "space", service: "service",
+    services: "service", accommodation: "place",
+  };
+  let ack = "";
+  if (isNewSearch) {
+    ack = `Sure — let's find you a ${categoryLabel[incomingCategory] || "match"}! 😊`;
+  } else if (leadExisted) {
+    if (!hadLocation && lead.requirements.location) {
+      ack = buildAck("location", lead.requirements.location);
+    } else if (!hadCategory && lead.requirements.category && lead.requirements.category !== "general") {
+      ack = buildAck("category", lead.requirements.category);
+    } else if (!hadBudget && lead.requirements.budgetMax) {
+      ack = buildAck("budget", lead.requirements.budgetMax);
+    }
+  }
+
   // ── reply branch ──────────────────────────────────────────────────────────────
   let reply;
   let matches = [];
@@ -216,15 +377,17 @@ export const processInboundMessage = async (commonMessage) => {
     // remember which field we asked about for the next turn.
     conversation.status = "waiting";
     lead.metadata = { ...lead.metadata, awaitingField: getPrimaryMissingField(lead.missingFields) };
-    reply = buildFollowUpQuestion(lead.missingFields);
+    lead.markModified("metadata"); // Mixed type — must flag so it persists.
+    reply = buildFollowUpQuestion(lead.missingFields, ack);
   } else {
     lead.metadata = { ...lead.metadata, awaitingField: null };
+    lead.markModified("metadata");
     // Requirements complete — run matching.
     matches = await findMatchesForLead(lead);
     lead.status = matches.length ? "Matched" : "Qualified";
     lead.lastMatchedAt = new Date();
     conversation.status = matches.length ? "matched" : "open";
-    reply = buildMatchReply(matches);
+    reply = buildMatchReply(matches, lead.requirements);
 
     // Mark the matches we're about to send so follow-up won't repeat them.
     if (matches.length) await markMatchesSent(matches);

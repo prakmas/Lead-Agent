@@ -1,14 +1,51 @@
 import Listing from "../models/Listing.js";
 import Match from "../models/Match.js";
+import { BUDGET_CATEGORIES } from "../utils/requirements.js";
 
 const normalize = (value = "") => value.toString().trim().toLowerCase();
+
+// Noise words that should NOT count as keyword matches (they inflate scores and
+// made unrelated listings appear, e.g. matching on "for", "to", "a").
+const STOPWORDS = new Set([
+  "a", "an", "the", "in", "on", "at", "to", "for", "of", "and", "or", "with",
+  "near", "around", "under", "below", "from", "is", "are", "am", "i", "need",
+  "want", "looking", "rent", "buy", "my", "me", "you", "your", "this", "that",
+  "please", "hi", "hello", "around", "approx", "about", "k",
+]);
 
 const tokenize = (values = []) =>
   values
     .flatMap((value) => normalize(value).split(/[\s,]+/))
-    .filter(Boolean);
+    .filter((w) => w.length > 2 && !STOPWORDS.has(w));
 
 const includes = (target, value) => normalize(target).includes(normalize(value));
+
+// All the place names attached to a listing — area, city, state, country — so a
+// search matches at ANY level ("Plano", "Dallas", "Texas", "USA" all hit a Plano
+// listing). Falls back to the flat location string for legacy data.
+const listingPlaceText = (listing) => {
+  const m = listing.metadata || {};
+  return normalize([listing.location, m.area, m.city, m.state, m.country].filter(Boolean).join(" "));
+};
+
+const locationMatches = (listing, requestedLocation) => {
+  if (!requestedLocation) return true; // no location asked → don't filter
+  const hay = listingPlaceText(listing);
+  const R = normalize(requestedLocation);
+  if (!hay) return false; // location asked but listing has none → exclude
+  if (hay.includes(R)) return true;
+  // Match on any meaningful token of the request (e.g. "HSR Layout" → "hsr").
+  return R.split(/[\s,]+/).some((tok) => tok.length > 2 && hay.includes(tok));
+};
+
+// Reject listings well above budget so a ₹2000 ask never returns ₹22000 places.
+// 25% headroom keeps "close" options; only applies to budget-driven categories.
+const withinBudget = (listing, requirements) => {
+  if (!requirements.budgetMax) return true;
+  if (!listing.budget) return true; // "price on request" — keep
+  if (!BUDGET_CATEGORIES.includes(normalize(requirements.category))) return true;
+  return listing.budget <= requirements.budgetMax * 1.25;
+};
 
 export const scoreListingForLead = (lead, listing) => {
   const requirements = lead.requirements || {};
@@ -20,7 +57,7 @@ export const scoreListingForLead = (lead, listing) => {
     reasons.push("Category match");
   }
 
-  if (requirements.location && listing.location && includes(listing.location, requirements.location)) {
+  if (requirements.location && locationMatches(listing, requirements.location)) {
     score += 25;
     reasons.push("Location match");
   }
@@ -63,10 +100,19 @@ export const findMatchesForLead = async (lead, limit = 5) => {
   const requirements = lead.requirements || {};
   const query = { status: "active" };
 
-  if (requirements.category) query.category = new RegExp(requirements.category, "i");
+  if (requirements.category && requirements.category !== "general") {
+    query.category = new RegExp(requirements.category, "i");
+  }
 
-  const listings = await Listing.find(query).limit(100);
-  const scored = listings
+  const listings = await Listing.find(query).limit(200);
+
+  // Hard filters first — these are non-negotiable for relevance. Asking for
+  // Nellore must NOT return Bangalore; asking ₹12k must not return ₹40k.
+  const eligible = listings.filter(
+    (l) => locationMatches(l, requirements.location) && withinBudget(l, requirements),
+  );
+
+  const scored = eligible
     .map((listing) => ({ listing, ...scoreListingForLead(lead, listing) }))
     .filter((item) => item.score > 0)
     .sort((a, b) => b.score - a.score)
