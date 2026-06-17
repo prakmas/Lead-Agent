@@ -13,6 +13,7 @@ import {
   applyPendingAnswer,
   classifyConversationIntent,
   computeMissingFields,
+  detectCategory,
   getPrimaryMissingField,
   SERVICE_MENU,
 } from "../utils/requirements.js";
@@ -181,8 +182,11 @@ export const processInboundMessage = async (commonMessage) => {
   // the customer can type "560034" instead of spelling "Koramangala".
   if (/^\d{6}$/.test(commonMessage.message.trim())) {
     const resolved = await resolvePincode(commonMessage.message.trim());
-    if (resolved?.area) {
-      commonMessage = { ...commonMessage, message: resolved.area };
+    // Use the district (e.g. "Hyderabad") rather than the hyper-local post-office
+    // name (e.g. "Cyberabad") so it reliably matches city-level listings.
+    const place = resolved?.district || resolved?.area;
+    if (place) {
+      commonMessage = { ...commonMessage, message: place };
     }
   }
 
@@ -303,14 +307,18 @@ export const processInboundMessage = async (commonMessage) => {
   // fresh request — drop the old location/budget so we ask again instead of
   // silently reusing the previous Nellore/₹12000.
   const incomingCategory = analysis.requirements?.category;
+  // Use the DETERMINISTIC keyword detector on the raw message (not the AI's
+  // guess) so a bare location like "Hyderabad" isn't mistaken for a category
+  // change and doesn't trigger a spurious reset.
+  const explicitCategory = detectCategory(commonMessage.message);
   const thisMsgHasLocation = !!analysis.requirements?.location;
   const thisMsgHasBudget = !!analysis.requirements?.budgetMax;
   const isNewSearch =
     leadExisted &&
-    incomingCategory &&
-    incomingCategory !== "general" &&
+    explicitCategory &&
+    explicitCategory !== "general" &&
     // (a) they named a different service than before, OR
-    ((lead.category && lead.category !== "general" && incomingCategory !== lead.category) ||
+    ((lead.category && lead.category !== "general" && explicitCategory !== lead.category) ||
       // (b) they re-stated a service (with no new location/budget) after results
       //     were already shown — i.e. they're starting over.
       (!thisMsgHasLocation && !thisMsgHasBudget && conversation.status === "matched"));
@@ -332,8 +340,8 @@ export const processInboundMessage = async (commonMessage) => {
     // Fresh requirement — keep only what this message actually provided.
     lead.title = analysis.title || lead.title;
     lead.intent = analysis.intent || lead.intent;
-    lead.requirements = { ...analysis.requirements };
-    lead.category = incomingCategory;
+    lead.requirements = { ...analysis.requirements, category: explicitCategory };
+    lead.category = explicitCategory;
     lead.metadata = { ...lead.metadata, awaitingField: null };
     lead.markModified("requirements");
     lead.markModified("metadata");
@@ -357,7 +365,7 @@ export const processInboundMessage = async (commonMessage) => {
   };
   let ack = "";
   if (isNewSearch) {
-    ack = `Sure — let's find you a ${categoryLabel[incomingCategory] || "match"}! 😊`;
+    ack = `Sure — let's find you a ${categoryLabel[explicitCategory] || "match"}! 😊`;
   } else if (leadExisted) {
     if (!hadLocation && lead.requirements.location) {
       ack = buildAck("location", lead.requirements.location);
@@ -366,6 +374,16 @@ export const processInboundMessage = async (commonMessage) => {
     } else if (!hadBudget && lead.requirements.budgetMax) {
       ack = buildAck("budget", lead.requirements.budgetMax);
     }
+  }
+
+  // If they answered the location question with a number we couldn't resolve
+  // (e.g. an invalid or mistyped pincode), gently tell them the correct format.
+  if (
+    awaitingField === "location" &&
+    !lead.requirements.location &&
+    /^\d{3,}$/.test(commonMessage.message.trim())
+  ) {
+    ack = "Hmm, that doesn't look like a valid area or 6-digit pincode 🤔";
   }
 
   // ── reply branch ──────────────────────────────────────────────────────────────
