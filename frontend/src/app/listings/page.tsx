@@ -3,18 +3,32 @@
 import { CheckCircle, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
+import { LocationPicker, type LocationValue } from "@/components/LocationPicker";
 import { PageHeader } from "@/components/PageHeader";
 import { api } from "@/lib/api";
 import type { Listing, Paginated } from "@/types/api";
 
+const CATEGORIES = [
+  ["flat", "Flat / Apartment"],
+  ["pg", "PG / Hostel"],
+  ["room", "Single Room"],
+  ["roommate", "Roommate / Sharing"],
+  ["house", "House / Villa"],
+  ["hotel", "Hotel / Short stay"],
+  ["supermarket", "Supermarket / Grocery"],
+  ["rental", "Commercial / Office"],
+  ["service", "Home Service"],
+];
+
 const EMPTY_FORM = {
   title: "",
-  category: "accommodation",
-  location: "",
+  category: "flat",
   budget: "",
   availability: "",
   description: "",
 };
+
+const EMPTY_LOC: LocationValue = { location: "" };
 
 export default function ListingsPage() {
   const [listings, setListings] = useState<Listing[]>([]);
@@ -22,6 +36,7 @@ export default function ListingsPage() {
   const [saving, setSaving] = useState(false);
   const [rematchNote, setRematchNote] = useState("");
   const [form, setForm] = useState(EMPTY_FORM);
+  const [loc, setLoc] = useState<LocationValue>(EMPTY_LOC);
 
   const loadListings = useCallback(async () => {
     const result = await api<Paginated<Listing>>("/admin/listings");
@@ -47,14 +62,23 @@ export default function ListingsPage() {
         method: "POST",
         body: JSON.stringify({
           ...form,
+          location: loc.location,
           budget: form.budget ? Number(form.budget) : undefined,
-          keywords: `${form.title} ${form.description} ${form.location}`
+          metadata: {
+            country: loc.country,
+            state: loc.state,
+            city: loc.city,
+            area: loc.area,
+            pincode: loc.pincode,
+          },
+          keywords: `${form.title} ${form.description} ${loc.location} ${loc.area || ""} ${loc.city || ""} ${loc.state || ""}`
             .split(/\s+/)
             .filter(Boolean),
         }),
       });
 
       setForm(EMPTY_FORM);
+      setLoc(EMPTY_LOC);
       await loadListings();
 
       // The backend triggers re-matching in the background — show a note after a
@@ -117,17 +141,13 @@ export default function ListingsPage() {
               onChange={(e) => setForm({ ...form, category: e.target.value })}
               className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-teal-600"
             >
-              <option value="accommodation">Accommodation</option>
-              <option value="roommate">Roommate</option>
-              <option value="rental">Rental</option>
-              <option value="services">Services</option>
+              {CATEGORIES.map(([val, label]) => (
+                <option key={val} value={val}>
+                  {label}
+                </option>
+              ))}
             </select>
-            <input
-              value={form.location}
-              onChange={(e) => setForm({ ...form, location: e.target.value })}
-              className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-teal-600"
-              placeholder="Location"
-            />
+            <LocationPicker value={loc} onChange={setLoc} />
             <input
               value={form.budget}
               onChange={(e) => setForm({ ...form, budget: e.target.value })}
