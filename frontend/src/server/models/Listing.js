@@ -41,10 +41,6 @@ const listingSchema = new mongoose.Schema(
     },
     // Which admin/supervisor added this listing (territory attribution).
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "AdminUser" },
-    // Soft-delete: archived listings are kept (audit) with a reason.
-    deletedAt: Date,
-    deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: "AdminUser" },
-    deleteReason: { type: String, trim: true },
     metadata: { type: mongoose.Schema.Types.Mixed, default: {} },
   },
   { timestamps: true },

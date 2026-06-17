@@ -78,6 +78,17 @@ export const listingService = {
     http.post<{ verified: boolean }>(endpoints.admin.listingOtpVerify, { phone, code }),
 };
 
+export const deletedListingService = {
+  list: (query?: QueryParams) => http.get<Paginated<Listing>>(endpoints.admin.deletedListings, { query }),
+  facets: (query?: QueryParams) =>
+    http.get<{ states: string[]; districts: string[]; areas: string[]; pincodes: string[] }>(
+      endpoints.admin.deletedListingFacets,
+      { query },
+    ),
+  restore: (id: string) => http.patch<{ message: string; id: string }>(endpoints.admin.deletedListing(id)),
+  purge: (id: string) => http.del<{ message: string }>(endpoints.admin.deletedListing(id)),
+};
+
 export const matchService = {
   list: (query?: QueryParams) => http.get<Paginated<Match>>(endpoints.admin.matches, { query }),
 };

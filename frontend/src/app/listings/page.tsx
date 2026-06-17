@@ -290,7 +290,6 @@ export default function ListingsPage() {
   const [loadingList, setLoadingList] = useState(true);
   // OTP verification of the owner's phone
   const [otp, setOtp] = useState({ sent: false, code: "", verified: false, dev: "", busy: false });
-  const [showDeleted, setShowDeleted] = useState(false);
   // Delete-with-reason modal
   const [deleteTarget, setDeleteTarget] = useState<Listing | null>(null);
   const [deleteReason, setDeleteReason] = useState("");
@@ -316,13 +315,12 @@ export default function ListingsPage() {
         district: appliedGeo.district || undefined,
         area: appliedGeo.area || undefined,
         pincode: appliedGeo.pincodes.length ? appliedGeo.pincodes.join(",") : undefined,
-        archived: showDeleted ? "true" : undefined,
       });
       setListings(result.data);
     } finally {
       setLoadingList(false);
     }
-  }, [creatorFilter, appliedGeo, showDeleted]);
+  }, [creatorFilter, appliedGeo]);
 
   // Debounce filter changes (pincode typing) before querying.
   useEffect(() => {
@@ -633,17 +631,8 @@ export default function ListingsPage() {
           <div className="space-y-2.5 border-b border-slate-200 px-4 py-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 className="text-sm font-semibold text-slate-950">
-                {showDeleted ? "Deleted listings" : "Active inventory"} <span className="ml-1 text-xs font-normal text-slate-400">({listings.length})</span>
+                Active inventory <span className="ml-1 text-xs font-normal text-slate-400">({listings.length})</span>
               </h2>
-              <button
-                type="button"
-                onClick={() => setShowDeleted((v) => !v)}
-                className={`inline-flex h-8 items-center gap-1.5 rounded-md border px-2 text-xs font-medium ${
-                  showDeleted ? "border-red-300 bg-red-50 text-red-700" : "border-slate-300 hover:bg-slate-50"
-                }`}
-              >
-                <Trash2 size={13} /> {showDeleted ? "Viewing deleted" : "Deleted"}
-              </button>
               <button type="button" onClick={() => loadListings().catch((err) => setError(err.message))} className="inline-flex h-8 items-center gap-2 rounded-md border border-slate-300 px-2 text-xs font-medium hover:bg-slate-50">
                 <RefreshCw size={14} /> Refresh
               </button>
@@ -710,10 +699,10 @@ export default function ListingsPage() {
               {listings.map((listing) => (
                 <article
                   key={listing._id}
-                  onClick={() => !showDeleted && canManage(listing) && startEdit(listing._id).catch((err) => setError(err.message))}
+                  onClick={() => canManage(listing) && startEdit(listing._id).catch((err) => setError(err.message))}
                   className={`flex gap-3 px-4 py-4 transition ${
                     editingId === listing._id ? "bg-teal-50/60" : ""
-                  } ${!showDeleted && canManage(listing) ? "cursor-pointer hover:bg-slate-50" : ""}`}
+                  } ${canManage(listing) ? "cursor-pointer hover:bg-slate-50" : ""}`}
                 >
                   {/* cover thumb */}
                   <div className="h-16 w-16 shrink-0 overflow-hidden rounded-md border border-slate-200 bg-slate-50">
@@ -747,16 +736,6 @@ export default function ListingsPage() {
                         )}
                       </div>
                     </div>
-                    {listing.deletedAt ? (
-                      <div className="mt-1 rounded-md bg-red-50 px-2 py-1 text-xs text-red-700 ring-1 ring-red-100">
-                        <span className="font-semibold">Deleted</span>
-                        {listing.deleteReason ? <> — {listing.deleteReason}</> : <> — no reason given</>}
-                        <span className="text-red-400">
-                          {" "}· {new Date(listing.deletedAt).toLocaleDateString()}
-                          {typeof listing.deletedBy === "object" && listing.deletedBy ? ` by ${listing.deletedBy.name || listing.deletedBy.email}` : ""}
-                        </span>
-                      </div>
-                    ) : null}
                     {listing.services ? (
                       <p className="mt-0.5 line-clamp-2 text-sm text-slate-600">{listing.services}</p>
                     ) : listing.description ? (

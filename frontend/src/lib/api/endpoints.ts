@@ -26,6 +26,9 @@ export const endpoints = {
     listingFacets: "/admin/listings/facets",
     listingOtpSend: "/admin/listings/otp/send",
     listingOtpVerify: "/admin/listings/otp/verify",
+    deletedListings: "/admin/deleted-listings",
+    deletedListing: (id: string) => `/admin/deleted-listings/${id}`,
+    deletedListingFacets: "/admin/deleted-listings/facets",
 
     matches: "/admin/matches",
 

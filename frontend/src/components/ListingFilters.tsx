@@ -7,10 +7,23 @@ import { listingService } from "@/lib/api";
 export type GeoFilter = { state: string; district: string; area: string; pincodes: string[] };
 export const EMPTY_GEO: GeoFilter = { state: "", district: "", area: "", pincodes: [] };
 
+type FacetsResult = { states: string[]; districts: string[]; areas: string[]; pincodes: string[] };
+type FacetsFn = (q?: { state?: string; district?: string; area?: string }) => Promise<FacetsResult>;
+
 // Cascading location filter: State → District → Area/Village, then a multi-select
 // Pincode dropdown of the pincodes available for that selection. Options come from
-// the listings themselves so every choice returns results.
-export function ListingFilters({ value, onChange }: { value: GeoFilter; onChange: (v: GeoFilter) => void }) {
+// the listings themselves so every choice returns results. Pass `facetsFn` to
+// source options from a different collection (e.g. deleted listings).
+export function ListingFilters({
+  value,
+  onChange,
+  facetsFn,
+}: {
+  value: GeoFilter;
+  onChange: (v: GeoFilter) => void;
+  facetsFn?: FacetsFn;
+}) {
+  const getFacets: FacetsFn = facetsFn || listingService.facets;
   const [states, setStates] = useState<string[]>([]);
   const [districts, setDistricts] = useState<string[]>([]);
   const [areas, setAreas] = useState<string[]>([]);
@@ -20,8 +33,7 @@ export function ListingFilters({ value, onChange }: { value: GeoFilter; onChange
 
   // One facets call covers everything for the current scope.
   useEffect(() => {
-    listingService
-      .facets({ state: value.state || undefined, district: value.district || undefined, area: value.area || undefined })
+    getFacets({ state: value.state || undefined, district: value.district || undefined, area: value.area || undefined })
       .then((r) => {
         setStates(r.states);
         setDistricts(r.districts);

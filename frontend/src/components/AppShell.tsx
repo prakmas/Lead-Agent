@@ -9,6 +9,7 @@ import {
   LogOut,
   Settings,
   ShieldCheck,
+  Trash2,
   Users,
 } from "lucide-react";
 import Link from "next/link";
@@ -89,12 +90,19 @@ export function AppShell({ children }: { children: ReactNode }) {
   };
 
   // Owner also gets the Supervisors (RBAC) link at the end.
+  const canListings = isOwner || (admin?.permissions?.listings && admin.permissions.listings !== "none");
+  const base = visibleNav.map((n) => ({ ...n, badge: 0 }));
+  // Insert "Deleted listings" right after Listings for anyone with listings access.
+  const withDeleted = canListings
+    ? base.flatMap((n) =>
+        n.href === "/listings"
+          ? [n, { href: "/deleted-listings", label: "Deleted listings", icon: Trash2, module: "listings", badge: 0 }]
+          : [n],
+      )
+    : base;
   const links = isOwner
-    ? [
-        ...visibleNav.map((n) => ({ ...n, badge: 0 })),
-        { href: "/supervisors", label: "Supervisors", icon: ShieldCheck, module: "supervisors", badge: pendingSupervisors },
-      ]
-    : visibleNav.map((n) => ({ ...n, badge: 0 }));
+    ? [...withDeleted, { href: "/supervisors", label: "Supervisors", icon: ShieldCheck, module: "supervisors", badge: pendingSupervisors }]
+    : withDeleted;
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-950">

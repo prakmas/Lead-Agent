@@ -1,4 +1,5 @@
 import Listing from "@/server/models/Listing.js";
+import DeletedListing from "@/server/models/DeletedListing.js";
 import { requireApiAccess } from "@/server/auth.js";
 import { route, json } from "@/server/http.js";
 import { listingInTerritory } from "@/server/utils/territory.js";
@@ -51,22 +52,30 @@ export const PATCH = route(async (request: Request, ctx: Ctx) => {
   return json(listing);
 });
 
-// Soft-delete — keep the record (archived) with a reason for audit.
+// Delete = MOVE the listing into the deletedListings collection (with reason),
+// then remove it from the active listings collection.
 export const DELETE = route(async (request: Request, ctx: Ctx) => {
   const admin = (await requireApiAccess(request)) as Admin;
   const { id } = await ctx.params;
   const existing = (await Listing.findById(id)) as
-    | (WithCreator & { status: string; deletedAt?: Date; deletedBy?: unknown; deleteReason?: string; save: () => Promise<unknown> })
+    | (WithCreator & { _id: unknown; toObject: () => Record<string, unknown> })
     | null;
   if (!existing) throw createHttpError(404, "Listing not found");
   ensureCanManage(admin, existing);
 
   const body = (await request.json().catch(() => ({}))) as { reason?: string };
-  existing.status = "archived";
-  existing.deletedAt = new Date();
-  existing.deletedBy = admin._id;
-  existing.deleteReason = (body.reason || "").trim();
-  await existing.save();
+  const snapshot = existing.toObject();
+  delete snapshot._id;
+  delete snapshot.__v;
+
+  await DeletedListing.create({
+    ...snapshot,
+    originalId: existing._id,
+    deletedAt: new Date(),
+    deletedBy: admin._id,
+    deleteReason: (body.reason || "").trim(),
+  });
+  await Listing.findByIdAndDelete(id);
 
   return json({ message: "Listing deleted", id });
 });
