@@ -1,11 +1,12 @@
 "use client";
 
-import { CheckCircle, ImageOff, Lock, MapPin, Pencil, Plus, RefreshCw, Trash2, UserRound, X } from "lucide-react";
+import { CheckCircle, ImageOff, Lock, Pencil, Plus, RefreshCw, Trash2, UserRound, X } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { CategorySelect, type CategoryGroup } from "@/components/CategorySelect";
 import { ImageUploader } from "@/components/ImageUploader";
 import { PageLoader } from "@/components/Loader";
+import { ListingFilters, EMPTY_GEO, type GeoFilter } from "@/components/ListingFilters";
 import { LocationPicker, type LocationValue } from "@/components/LocationPicker";
 import { MapPicker, type GeoValue } from "@/components/MapPicker";
 import { PageHeader } from "@/components/PageHeader";
@@ -258,8 +259,8 @@ export default function ListingsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [loadingList, setLoadingList] = useState(true);
   const [creatorFilter, setCreatorFilter] = useState("");
-  const [placeInput, setPlaceInput] = useState("");
-  const [placeFilter, setPlaceFilter] = useState("");
+  const [geoFilter, setGeoFilter] = useState<GeoFilter>(EMPTY_GEO);
+  const [appliedGeo, setAppliedGeo] = useState<GeoFilter>(EMPTY_GEO);
   const [supervisors, setSupervisors] = useState<Supervisor[]>([]);
 
   const me = getAdmin();
@@ -276,19 +277,22 @@ export default function ListingsPage() {
     try {
       const result = await listingService.list({
         createdBy: creatorFilter || undefined,
-        place: placeFilter || undefined,
+        state: appliedGeo.state || undefined,
+        district: appliedGeo.district || undefined,
+        area: appliedGeo.area || undefined,
+        pincode: appliedGeo.pincode || undefined,
       });
       setListings(result.data);
     } finally {
       setLoadingList(false);
     }
-  }, [creatorFilter, placeFilter]);
+  }, [creatorFilter, appliedGeo]);
 
-  // Debounce the place filter input.
+  // Debounce filter changes (pincode typing) before querying.
   useEffect(() => {
-    const t = setTimeout(() => setPlaceFilter(placeInput.trim()), 350);
+    const t = setTimeout(() => setAppliedGeo(geoFilter), 300);
     return () => clearTimeout(t);
-  }, [placeInput]);
+  }, [geoFilter]);
 
   // Owner gets supervisor filter badges.
   useEffect(() => {
@@ -298,6 +302,20 @@ export default function ListingsPage() {
       .then((r) => setSupervisors(r.data))
       .catch(() => {});
   }, [isOwner]);
+
+  // When a location is selected, only show supervisors who cover it (territory
+  // value matches the chosen state / district / pincode).
+  const locActive = geoFilter.state || geoFilter.district || geoFilter.pincode;
+  const shownSupervisors = locActive
+    ? supervisors.filter((s) =>
+        (s.territories || []).some(
+          (t) =>
+            (t.level === "state" && t.value === geoFilter.state) ||
+            (t.level === "city" && t.value === geoFilter.district) ||
+            (t.level === "pincode" && t.value === geoFilter.pincode),
+        ),
+      )
+    : supervisors;
 
   useEffect(() => {
     loadListings().catch((err) => setError(err.message));
@@ -466,60 +484,51 @@ export default function ListingsPage() {
               <h2 className="text-sm font-semibold text-slate-950">
                 Active inventory <span className="ml-1 text-xs font-normal text-slate-400">({listings.length})</span>
               </h2>
-              <div className="flex items-center gap-2">
-                {/* Flexible location filter: pincode / state / district / mandal / village */}
-                <div className="flex h-8 items-center gap-1.5 rounded-md border border-slate-300 px-2 focus-within:border-teal-600">
-                  <MapPin size={13} className="text-slate-400" />
-                  <input
-                    value={placeInput}
-                    onChange={(e) => setPlaceInput(e.target.value)}
-                    placeholder="Filter by pincode / state / district / village"
-                    className="h-7 w-64 text-xs outline-none"
-                  />
-                  {placeInput ? (
-                    <button type="button" onClick={() => setPlaceInput("")} className="text-slate-400 hover:text-slate-700">
-                      <X size={13} />
-                    </button>
-                  ) : null}
-                </div>
-                <button type="button" onClick={() => loadListings().catch((err) => setError(err.message))} className="inline-flex h-8 items-center gap-2 rounded-md border border-slate-300 px-2 text-xs font-medium hover:bg-slate-50">
-                  <RefreshCw size={14} /> Refresh
-                </button>
-              </div>
+              <button type="button" onClick={() => loadListings().catch((err) => setError(err.message))} className="inline-flex h-8 items-center gap-2 rounded-md border border-slate-300 px-2 text-xs font-medium hover:bg-slate-50">
+                <RefreshCw size={14} /> Refresh
+              </button>
             </div>
 
-            {/* Colored supervisor filter badges (owner only) */}
+            {/* Cascading location filters: state → district → area + pincode */}
+            <ListingFilters value={geoFilter} onChange={setGeoFilter} />
+
+            {/* Supervisor badges — contextual to the selected area (owner only) */}
             {isOwner && supervisors.length > 0 ? (
-              <div className="flex flex-wrap items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => setCreatorFilter("")}
-                  className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 transition ${
-                    creatorFilter === "" ? "bg-slate-800 text-white ring-slate-800" : "bg-white text-slate-600 ring-slate-300 hover:bg-slate-50"
-                  }`}
-                >
-                  All
-                </button>
-                {supervisors.map((s, i) => {
-                  const active = creatorFilter === s._id;
-                  const terr = (s.territories || []).map((t) => t.value).slice(0, 3).join(", ");
-                  return (
-                    <button
-                      key={s._id}
-                      type="button"
-                      onClick={() => setCreatorFilter(active ? "" : s._id)}
-                      title={terr ? `Territory: ${terr}` : "No territory assigned"}
-                      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 transition ${
-                        active ? BADGE_ACTIVE[i % BADGE_ACTIVE.length] : `${BADGE_COLORS[i % BADGE_COLORS.length]} hover:opacity-80`
-                      }`}
-                    >
-                      <UserRound size={11} />
-                      {s.name}
-                      {terr ? <span className="opacity-70">· {terr}</span> : null}
-                    </button>
-                  );
-                })}
-              </div>
+              shownSupervisors.length === 0 ? (
+                <p className="text-[11px] italic text-slate-400">No supervisor covers the selected area.</p>
+              ) : (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setCreatorFilter("")}
+                    className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 transition ${
+                      creatorFilter === "" ? "bg-slate-800 text-white ring-slate-800" : "bg-white text-slate-600 ring-slate-300 hover:bg-slate-50"
+                    }`}
+                  >
+                    All
+                  </button>
+                  {shownSupervisors.map((s) => {
+                    const i = supervisors.findIndex((x) => x._id === s._id);
+                    const active = creatorFilter === s._id;
+                    const terr = (s.territories || []).map((t) => t.value).slice(0, 3).join(", ");
+                    return (
+                      <button
+                        key={s._id}
+                        type="button"
+                        onClick={() => setCreatorFilter(active ? "" : s._id)}
+                        title={terr ? `Territory: ${terr}` : "No territory assigned"}
+                        className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 transition ${
+                          active ? BADGE_ACTIVE[i % BADGE_ACTIVE.length] : `${BADGE_COLORS[i % BADGE_COLORS.length]} hover:opacity-80`
+                        }`}
+                      >
+                        <UserRound size={11} />
+                        {s.name}
+                        {terr ? <span className="opacity-70">· {terr}</span> : null}
+                      </button>
+                    );
+                  })}
+                </div>
+              )
             ) : null}
           </div>
 

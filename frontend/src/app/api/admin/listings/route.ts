@@ -25,8 +25,15 @@ export const GET = route(async (request: Request) => {
   // Filter by the supervisor who created the listing (admin oversight).
   if (options.get("createdBy")) query.createdBy = options.get("createdBy");
 
-  // Flexible place filter — matches pincode / state / district / mandal / village
-  // (area) or the flat location string, case-insensitively.
+  // Cascading location filters (exact field match) — state → district → area,
+  // plus an independent pincode. Each combines (AND).
+  if (options.get("state")) query["metadata.state"] = options.get("state");
+  if (options.get("district")) query["metadata.city"] = options.get("district");
+  if (options.get("area")) query["metadata.area"] = options.get("area");
+  if (options.get("pincode")) query["metadata.pincode"] = options.get("pincode");
+
+  // Flexible free-text place filter — matches pincode / state / district / mandal
+  // / village (area) or the flat location string, case-insensitively.
   const place = options.get("place");
   if (place && place.trim()) {
     const rx = new RegExp(escapeRx(place.trim()), "i");

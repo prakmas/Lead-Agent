@@ -23,6 +23,7 @@ export const endpoints = {
     listings: "/admin/listings",
     listing: (id: string) => `/admin/listings/${id}`,
     listingsRematch: "/admin/listings/match",
+    listingFacets: "/admin/listings/facets",
 
     matches: "/admin/matches",
 
