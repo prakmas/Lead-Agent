@@ -1,4 +1,5 @@
 import Listing from "@/server/models/Listing.js";
+import OtpToken from "@/server/models/OtpToken.js";
 import { requireApiAccess } from "@/server/auth.js";
 import { route, json, parseListQuery, paginate } from "@/server/http.js";
 import { triggerRematchForNewListing } from "@/server/services/followUp.service.js";
@@ -75,7 +76,16 @@ export const POST = route(async (request: Request) => {
   const body = await request.json();
   if (!body.title || !body.category) throw createHttpError(400, "Title and category are required");
 
-  const listing = await Listing.create({ ...body, createdBy: admin._id });
+  // If an owner phone is provided, it MUST have been verified via OTP.
+  let phoneVerified = false;
+  if (body.ownerPhone) {
+    const clean = String(body.ownerPhone).replace(/\D/g, "");
+    const token = await OtpToken.findOne({ phone: clean, verified: true });
+    if (!token) throw createHttpError(400, "Please verify the owner's phone with OTP before listing the business.");
+    phoneVerified = true;
+  }
+
+  const listing = await Listing.create({ ...body, phoneVerified, createdBy: admin._id });
 
   // Notify any matching active leads (runs in the background).
   triggerRematchForNewListing(listing)

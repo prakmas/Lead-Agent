@@ -24,6 +24,8 @@ export const endpoints = {
     listing: (id: string) => `/admin/listings/${id}`,
     listingsRematch: "/admin/listings/match",
     listingFacets: "/admin/listings/facets",
+    listingOtpSend: "/admin/listings/otp/send",
+    listingOtpVerify: "/admin/listings/otp/verify",
 
     matches: "/admin/matches",
 

@@ -71,6 +71,10 @@ export const listingService = {
       endpoints.admin.listingFacets,
       { query },
     ),
+  otpSend: (phone: string) =>
+    http.post<{ sent: boolean; devCode?: string; note?: string }>(endpoints.admin.listingOtpSend, { phone }),
+  otpVerify: (phone: string, code: string) =>
+    http.post<{ verified: boolean }>(endpoints.admin.listingOtpVerify, { phone, code }),
 };
 
 export const matchService = {

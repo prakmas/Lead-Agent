@@ -243,8 +243,13 @@ const EMPTY_FORM = {
   budget: "",
   availability: "",
   description: "",
-  contactName: "",
-  contactPhone: "",
+  ownerName: "",
+  ownerPhone: "",
+  mapLink: "",
+  address: "",
+  landmark: "",
+  timings: "",
+  services: "",
 };
 
 export default function ListingsPage() {
@@ -258,6 +263,8 @@ export default function ListingsPage() {
   const [images, setImages] = useState<string[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [loadingList, setLoadingList] = useState(true);
+  // OTP verification of the owner's phone
+  const [otp, setOtp] = useState({ sent: false, code: "", verified: false, dev: "", busy: false });
   const [creatorFilter, setCreatorFilter] = useState("");
   const [geoFilter, setGeoFilter] = useState<GeoFilter>(EMPTY_GEO);
   const [appliedGeo, setAppliedGeo] = useState<GeoFilter>(EMPTY_GEO);
@@ -323,6 +330,7 @@ export default function ListingsPage() {
     setGeo({});
     setImages([]);
     setEditingId(null);
+    setOtp({ sent: false, code: "", verified: false, dev: "", busy: false });
   };
 
   const startEdit = async (id: string) => {
@@ -336,8 +344,13 @@ export default function ListingsPage() {
         budget: l.budget ? String(l.budget) : "",
         availability: l.availability || "",
         description: l.description || "",
-        contactName: l.contactName || "",
-        contactPhone: l.contactPhone || "",
+        ownerName: l.ownerName || "",
+        ownerPhone: l.ownerPhone || "",
+        mapLink: l.mapLink || "",
+        address: l.address || "",
+        landmark: l.landmark || "",
+        timings: l.timings || "",
+        services: l.services || "",
       });
       setLoc({
         location: l.location || "",
@@ -349,9 +362,42 @@ export default function ListingsPage() {
       });
       setGeo(l.geo || {});
       setImages(l.images || []);
+      // Editing doesn't require re-OTP; treat an already-verified listing as ok.
+      setOtp({ sent: false, code: "", verified: !!l.phoneVerified, dev: "", busy: false });
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load listing");
+    }
+  };
+
+  // OTP: owner phone verification (the same APIs the mobile app will use).
+  const needsOtp = !editingId && !!form.ownerPhone.trim() && !otp.verified;
+
+  const sendOtp = async () => {
+    if (!form.ownerPhone.trim()) {
+      setError("Enter the owner's phone first");
+      return;
+    }
+    setError("");
+    setOtp((o) => ({ ...o, busy: true }));
+    try {
+      const res = await listingService.otpSend(form.ownerPhone);
+      setOtp((o) => ({ ...o, sent: true, dev: res.devCode || "", busy: false }));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to send OTP");
+      setOtp((o) => ({ ...o, busy: false }));
+    }
+  };
+
+  const verifyOtp = async () => {
+    setError("");
+    setOtp((o) => ({ ...o, busy: true }));
+    try {
+      await listingService.otpVerify(form.ownerPhone, otp.code);
+      setOtp((o) => ({ ...o, verified: true, busy: false }));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Invalid OTP");
+      setOtp((o) => ({ ...o, busy: false }));
     }
   };
 
@@ -359,12 +405,19 @@ export default function ListingsPage() {
     event.preventDefault();
     setError("");
     setRematchNote("");
+    if (needsOtp) {
+      setError("Please verify the owner's phone with OTP before listing the business.");
+      return;
+    }
     setSaving(true);
 
     try {
       const coverThumb = images[0] ? await dataUrlToThumb(images[0]) : "";
       const payload = {
         ...form,
+        // Mirror owner contact into the customer-facing contact for WhatsApp.
+        contactName: form.ownerName,
+        contactPhone: form.ownerPhone,
         location: loc.location,
         budget: form.budget ? Number(form.budget) : undefined,
         images,
@@ -377,7 +430,7 @@ export default function ListingsPage() {
           area: loc.area,
           pincode: loc.pincode,
         },
-        keywords: `${form.title} ${form.description} ${loc.location} ${loc.area || ""} ${loc.city || ""} ${loc.state || ""}`
+        keywords: `${form.title} ${form.description} ${form.services} ${loc.location} ${loc.area || ""} ${loc.city || ""} ${loc.state || ""}`
           .split(/\s+/)
           .filter(Boolean),
       };
@@ -387,7 +440,7 @@ export default function ListingsPage() {
         setRematchNote("Listing updated.");
       } else {
         await listingService.create(payload);
-        setRematchNote("Listing saved. Active leads will get a match update within 1 minute.");
+        setRematchNote("Business listed. Active leads will get a match update within 1 minute.");
       }
       resetForm();
       await loadListings();
@@ -434,7 +487,7 @@ export default function ListingsPage() {
           </div>
 
           <div className="mt-4 space-y-3">
-            <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className={field} placeholder="Title *" required />
+            <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className={field} placeholder="Business name *" required />
             <CategorySelect
               groups={CATEGORY_GROUPS}
               value={form.category}
@@ -445,6 +498,51 @@ export default function ListingsPage() {
               <p className="mb-1 text-xs font-semibold text-slate-500">Photos</p>
               <ImageUploader images={images} onChange={setImages} />
             </div>
+
+            {/* ── Owner + OTP verification ── */}
+            <div className="rounded-md border border-slate-200 bg-slate-50/60 p-3">
+              <p className="mb-2 text-xs font-semibold text-slate-500">Owner &amp; verification</p>
+              <input value={form.ownerName} onChange={(e) => setForm({ ...form, ownerName: e.target.value })} className={`${field} mb-2`} placeholder="Owner name" />
+              <div className="flex gap-2">
+                <input
+                  value={form.ownerPhone}
+                  onChange={(e) => {
+                    setForm({ ...form, ownerPhone: e.target.value });
+                    setOtp({ sent: false, code: "", verified: false, dev: "", busy: false });
+                  }}
+                  className={field}
+                  placeholder="Owner phone"
+                  inputMode="tel"
+                  disabled={otp.verified}
+                />
+                {otp.verified ? (
+                  <span className="inline-flex h-10 shrink-0 items-center gap-1 rounded-md bg-emerald-50 px-2.5 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200">
+                    <CheckCircle size={14} /> Verified
+                  </span>
+                ) : (
+                  <button type="button" onClick={sendOtp} disabled={otp.busy || !form.ownerPhone.trim()} className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-md bg-slate-900 px-3 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-40">
+                    {otp.busy ? "…" : otp.sent ? "Resend" : "Send OTP"}
+                  </button>
+                )}
+              </div>
+              {otp.sent && !otp.verified ? (
+                <div className="mt-2 flex gap-2">
+                  <input value={otp.code} onChange={(e) => setOtp((o) => ({ ...o, code: e.target.value.replace(/\D/g, "").slice(0, 6) }))} className={field} placeholder="Enter OTP" inputMode="numeric" />
+                  <button type="button" onClick={verifyOtp} disabled={otp.busy || otp.code.length < 4} className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-md bg-teal-700 px-3 text-xs font-semibold text-white hover:bg-teal-800 disabled:opacity-40">
+                    Verify
+                  </button>
+                </div>
+              ) : null}
+              {otp.dev && !otp.verified ? (
+                <p className="mt-1.5 text-[11px] text-amber-600">Dev OTP (no SMS provider yet): <span className="font-mono font-bold">{otp.dev}</span></p>
+              ) : null}
+            </div>
+
+            <input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} className={field} placeholder="Address" />
+            <input value={form.landmark} onChange={(e) => setForm({ ...form, landmark: e.target.value })} className={field} placeholder="Landmark (near / opposite / beside)" />
+            <input value={form.mapLink} onChange={(e) => setForm({ ...form, mapLink: e.target.value })} className={field} placeholder="Google Maps link (paste)" />
+            <input value={form.timings} onChange={(e) => setForm({ ...form, timings: e.target.value })} className={field} placeholder="Timings (e.g. Mon–Sat 9am–9pm)" />
+            <textarea value={form.services} onChange={(e) => setForm({ ...form, services: e.target.value })} className="min-h-16 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-teal-600" placeholder="Services offered (free text — e.g. bike & auto repair, servicing, puncture)" />
 
             <div>
               <p className="mb-1 text-xs font-semibold text-slate-500">Location (area / pincode)</p>
@@ -457,18 +555,17 @@ export default function ListingsPage() {
             </div>
 
             <div className="grid grid-cols-2 gap-2">
-              <input value={form.contactName} onChange={(e) => setForm({ ...form, contactName: e.target.value })} className={field} placeholder="Contact name" />
-              <input value={form.contactPhone} onChange={(e) => setForm({ ...form, contactPhone: e.target.value })} className={field} placeholder="Contact phone" />
-            </div>
-            <div className="grid grid-cols-2 gap-2">
               <input value={form.budget} onChange={(e) => setForm({ ...form, budget: e.target.value })} className={field} placeholder="Budget / price" type="number" />
               <input value={form.availability} onChange={(e) => setForm({ ...form, availability: e.target.value })} className={field} placeholder="Availability" />
             </div>
-            <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="min-h-20 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-teal-600" placeholder="Description" />
+            <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="min-h-16 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-teal-600" placeholder="Description (optional)" />
 
-            <button disabled={saving} className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-teal-700 text-sm font-semibold text-white hover:bg-teal-800 disabled:bg-slate-400">
+            {needsOtp ? (
+              <p className="text-[11px] font-medium text-amber-600">Verify the owner&apos;s phone with OTP to list the business.</p>
+            ) : null}
+            <button disabled={saving || needsOtp} className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-teal-700 text-sm font-semibold text-white hover:bg-teal-800 disabled:bg-slate-400">
               <Plus size={16} />
-              {saving ? "Saving…" : editingId ? "Update listing" : "Create listing"}
+              {saving ? "Saving…" : editingId ? "Update listing" : "List business"}
             </button>
           </div>
         </form>
@@ -577,12 +674,41 @@ export default function ListingsPage() {
                         )}
                       </div>
                     </div>
-                    {listing.description ? <p className="mt-0.5 line-clamp-1 text-sm text-slate-600">{listing.description}</p> : null}
+                    {listing.services ? (
+                      <p className="mt-0.5 line-clamp-2 text-sm text-slate-600">{listing.services}</p>
+                    ) : listing.description ? (
+                      <p className="mt-0.5 line-clamp-1 text-sm text-slate-600">{listing.description}</p>
+                    ) : null}
+
+                    {/* Business registration details */}
+                    {(listing.ownerName || listing.ownerPhone || listing.address || listing.landmark || listing.timings || listing.mapLink) ? (
+                      <div className="mt-1.5 space-y-0.5 text-xs text-slate-500">
+                        {listing.ownerName || listing.ownerPhone ? (
+                          <p>
+                            👤 {listing.ownerName || "Owner"}
+                            {listing.ownerPhone ? ` · ${listing.ownerPhone}` : ""}
+                            {listing.phoneVerified ? (
+                              <span className="ml-1 inline-flex items-center gap-0.5 text-emerald-600">
+                                <CheckCircle size={11} /> verified
+                              </span>
+                            ) : null}
+                          </p>
+                        ) : null}
+                        {listing.address ? <p>🏠 {listing.address}</p> : null}
+                        {listing.landmark ? <p>📌 {listing.landmark}</p> : null}
+                        {listing.timings ? <p>🕒 {listing.timings}</p> : null}
+                        {listing.mapLink ? (
+                          <a href={listing.mapLink} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-teal-600 hover:underline">
+                            🗺️ Google Maps
+                          </a>
+                        ) : null}
+                      </div>
+                    ) : null}
+
                     <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">
                       <span className="capitalize">{listing.category}</span>
                       {listing.location ? <span>{listing.location}</span> : null}
                       {listing.budget ? <span>₹{listing.budget.toLocaleString()}</span> : null}
-                      {listing.contactPhone ? <span>📞 {listing.contactPhone}</span> : null}
                       {listing.geo?.lat ? <span className="text-teal-600">📍 pinned</span> : null}
                       {(() => {
                         const c = typeof listing.createdBy === "object" ? listing.createdBy : null;

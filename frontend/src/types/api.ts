@@ -123,6 +123,15 @@ export type Listing = {
   geo?: { lat?: number; lng?: number; address?: string };
   contactName?: string;
   contactPhone?: string;
+  // Business registration details
+  ownerName?: string;
+  ownerPhone?: string;
+  phoneVerified?: boolean;
+  mapLink?: string;
+  address?: string;
+  landmark?: string;
+  timings?: string;
+  services?: string;
   metadata?: { country?: string; state?: string; city?: string; area?: string; pincode?: string };
   createdBy?: { _id: string; name?: string; email?: string; role?: string } | string | null;
   status: string;

@@ -25,6 +25,15 @@ const listingSchema = new mongoose.Schema(
     contactName: { type: String, trim: true },
     contactPhone: { type: String, trim: true },
     contactInfo: { type: mongoose.Schema.Types.Mixed, default: {} },
+    // ── Business registration details (captured by a supervisor on-site) ──
+    ownerName: { type: String, trim: true },
+    ownerPhone: { type: String, trim: true }, // verified via OTP
+    phoneVerified: { type: Boolean, default: false },
+    mapLink: { type: String, trim: true }, // pasted Google Maps URL
+    address: { type: String, trim: true }, // full address
+    landmark: { type: String, trim: true }, // near / opposite / beside
+    timings: { type: String, trim: true }, // e.g. "Mon–Sat 9am–9pm"
+    services: { type: String, trim: true }, // free text — what the business does
     status: {
       type: String,
       enum: ["active", "inactive", "matched", "archived"],
