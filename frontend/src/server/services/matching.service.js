@@ -44,7 +44,9 @@ const withinBudget = (listing, requirements) => {
   if (!requirements.budgetMax) return true;
   if (!listing.budget) return true; // "price on request" — keep
   if (!BUDGET_CATEGORIES.includes(normalize(requirements.category))) return true;
-  return listing.budget <= requirements.budgetMax * 1.25;
+  // Strict: "under 10,000" must NOT show a 12,000 listing. Small 2% grace only
+  // to avoid excluding an exact-budget listing due to rounding.
+  return listing.budget <= requirements.budgetMax * 1.02;
 };
 
 export const scoreListingForLead = (lead, listing) => {
