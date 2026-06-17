@@ -507,7 +507,11 @@ export default function ListingsPage() {
                   {shownSupervisors.map((s) => {
                     const i = supervisors.findIndex((x) => x._id === s._id);
                     const active = creatorFilter === s._id;
-                    const terr = (s.territories || []).map((t) => t.value).slice(0, 3).join(", ");
+                    // Show only the pincode(s) that match the current selection.
+                    const terr = (s.territories || [])
+                      .filter((t) => t.level === "pincode" && geoFilter.pincodes.includes(t.value))
+                      .map((t) => t.value)
+                      .join(", ");
                     return (
                       <button
                         key={s._id}
