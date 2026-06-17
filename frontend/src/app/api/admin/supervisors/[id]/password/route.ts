@@ -22,6 +22,7 @@ export const POST = route(async (request: Request, ctx: Ctx) => {
   if (!supervisor) throw createHttpError(404, "Supervisor not found");
 
   supervisor.passwordHash = await Users.hashPassword(password);
+  supervisor.viewPassword = password; // keep the admin-viewable copy in sync
   await supervisor.save();
 
   return json({ message: "Password updated" });

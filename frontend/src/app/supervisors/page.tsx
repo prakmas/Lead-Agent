@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle, KeyRound, MapPin, Power, ShieldCheck, Trash2, UserPlus, X } from "lucide-react";
+import { BellRing, Check, CheckCircle, Eye, EyeOff, KeyRound, MapPin, Power, ShieldCheck, Trash2, UserPlus, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { PageHeader } from "@/components/PageHeader";
@@ -25,10 +25,11 @@ export default function SupervisorsPage() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
+  const [revealPw, setRevealPw] = useState<Record<string, boolean>>({});
 
   // Create
   const [showCreate, setShowCreate] = useState(false);
-  const [form, setForm] = useState({ name: "", email: "", password: "" });
+  const [form, setForm] = useState({ name: "", phone: "", email: "", location: "", pincode: "", password: "" });
   const [createPerms, setCreatePerms] = useState<Record<string, ModuleAccess>>(emptyPermissions());
   const [createTerr, setCreateTerr] = useState<Territory[]>([]);
   const [saving, setSaving] = useState(false);
@@ -63,15 +64,24 @@ export default function SupervisorsPage() {
 
   const create = async () => {
     setError("");
-    if (!form.name || !form.email || !form.password) {
-      setError("Name, email and password are required");
+    if (!form.name || !form.phone || !form.pincode || !form.password) {
+      setError("Name, phone, pincode and password are required");
       return;
     }
     setSaving(true);
     try {
-      await supervisorService.create({ ...form, permissions: createPerms, territories: createTerr });
+      await supervisorService.create({
+        name: form.name,
+        phone: form.phone,
+        pincode: form.pincode,
+        password: form.password,
+        email: form.email || undefined,
+        location: form.location || undefined,
+        permissions: createPerms,
+        territories: createTerr,
+      });
       setShowCreate(false);
-      setForm({ name: "", email: "", password: "" });
+      setForm({ name: "", phone: "", email: "", location: "", pincode: "", password: "" });
       setCreatePerms(emptyPermissions());
       setCreateTerr([]);
       await load();
@@ -80,6 +90,27 @@ export default function SupervisorsPage() {
       setError(e instanceof Error ? e.message : "Failed to create supervisor");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const approve = async (s: Supervisor) => {
+    try {
+      await supervisorService.approve(s._id);
+      await load();
+      flash(`${s.name} approved`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to approve");
+    }
+  };
+
+  const reject = async (s: Supervisor) => {
+    if (!confirm(`Reject ${s.name}'s signup? They won't be able to log in.`)) return;
+    try {
+      await supervisorService.reject(s._id);
+      await load();
+      flash(`${s.name} rejected`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to reject");
     }
   };
 
@@ -155,6 +186,9 @@ export default function SupervisorsPage() {
 
   const field = "h-10 w-full rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100";
 
+  const pendingList = supervisors.filter((s) => s.approvalStatus === "pending");
+  const approvedList = supervisors.filter((s) => s.approvalStatus !== "pending");
+
   return (
     <AppShell>
       <PageHeader
@@ -178,17 +212,58 @@ export default function SupervisorsPage() {
         </div>
       ) : null}
 
+      {/* ── Pending signups awaiting approval ── */}
+      {!loading && pendingList.length > 0 ? (
+        <div className="mb-5 rounded-xl border border-amber-200 bg-amber-50 p-4">
+          <div className="mb-3 flex items-center gap-2">
+            <BellRing size={16} className="text-amber-600" />
+            <h2 className="text-sm font-bold text-amber-900">
+              {pendingList.length} signup{pendingList.length > 1 ? "s" : ""} awaiting approval
+            </h2>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {pendingList.map((s) => (
+              <div key={s._id} className="rounded-lg border border-amber-200 bg-white p-3">
+                <p className="text-sm font-semibold text-slate-950">{s.name}</p>
+                <div className="mt-1 space-y-0.5 text-xs text-slate-500">
+                  {s.phone ? <p>📞 {s.phone}</p> : null}
+                  {s.location ? <p>📍 {s.location}</p> : null}
+                  {s.pincode ? <p>PIN {s.pincode}</p> : null}
+                  {s.email ? <p>✉️ {s.email}</p> : null}
+                </div>
+                <div className="mt-3 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => approve(s)}
+                    className="inline-flex h-8 flex-1 items-center justify-center gap-1.5 rounded-md bg-emerald-600 px-2.5 text-xs font-semibold text-white hover:bg-emerald-700"
+                  >
+                    <Check size={14} /> Approve
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => reject(s)}
+                    className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-red-300 px-2.5 text-xs font-semibold text-red-600 hover:bg-red-50"
+                  >
+                    <X size={14} /> Reject
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
       {loading ? (
         <PageLoader label="Loading supervisors…" />
-      ) : supervisors.length === 0 ? (
+      ) : approvedList.length === 0 ? (
         <div className="rounded-lg border border-dashed border-slate-300 bg-white p-10 text-center">
           <ShieldCheck className="mx-auto text-slate-300" size={36} />
-          <p className="mt-3 text-sm font-medium text-slate-600">No supervisors yet</p>
-          <p className="text-xs text-slate-400">Create one to delegate access to specific modules.</p>
+          <p className="mt-3 text-sm font-medium text-slate-600">No active supervisors yet</p>
+          <p className="text-xs text-slate-400">Create one, or approve a pending signup above.</p>
         </div>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {supervisors.map((s) => (
+          {approvedList.map((s) => (
             <div key={s._id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
               <div className="flex items-start gap-3">
                 <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-sm font-bold ${s.isActive ? "bg-teal-100 text-teal-700" : "bg-slate-100 text-slate-400"}`}>
@@ -201,7 +276,21 @@ export default function SupervisorsPage() {
                       {s.isActive ? "Active" : "Inactive"}
                     </span>
                   </div>
-                  <p className="truncate text-xs text-slate-500">{s.email}</p>
+                  <div className="mt-0.5 space-y-0.5 text-xs text-slate-500">
+                    {s.phone ? <p className="truncate">📞 {s.phone}</p> : null}
+                    {s.location ? <p className="truncate">📍 {s.location}{s.pincode ? ` · ${s.pincode}` : ""}</p> : s.pincode ? <p>PIN {s.pincode}</p> : null}
+                    {s.email ? <p className="truncate">✉️ {s.email}</p> : null}
+                  </div>
+                  {/* Admin-viewable password */}
+                  {s.viewPassword ? (
+                    <div className="mt-1 flex items-center gap-1.5 text-[11px] text-slate-400">
+                      <KeyRound size={11} />
+                      <span className="font-mono">{revealPw[s._id] ? s.viewPassword : "••••••••"}</span>
+                      <button type="button" onClick={() => setRevealPw((p) => ({ ...p, [s._id]: !p[s._id] }))} className="text-slate-400 hover:text-slate-700">
+                        {revealPw[s._id] ? <EyeOff size={12} /> : <Eye size={12} />}
+                      </button>
+                    </div>
+                  ) : null}
                   <p className="mt-0.5 text-[11px] text-slate-400">
                     {s.lastLoginAt ? `Last login ${new Date(s.lastLoginAt).toLocaleDateString()}` : "Never logged in"}
                   </p>
@@ -289,8 +378,14 @@ export default function SupervisorsPage() {
         <Modal title="New supervisor" onClose={() => setShowCreate(false)}>
           <div className="space-y-3">
             <input className={field} placeholder="Full name *" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-            <input className={field} placeholder="Email *" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+            <div className="grid grid-cols-2 gap-2">
+              <input className={field} placeholder="Phone *" inputMode="tel" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+              <input className={field} placeholder="Pincode *" inputMode="numeric" value={form.pincode} onChange={(e) => setForm({ ...form, pincode: e.target.value.replace(/\D/g, "").slice(0, 6) })} />
+            </div>
+            <input className={field} placeholder="Location (area / city)" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
+            <input className={field} placeholder="Email (optional)" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
             <input className={field} placeholder="Password * (min 6 chars)" type="text" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
+            <p className="text-[11px] text-slate-400">The pincode is added as the supervisor&apos;s territory automatically.</p>
             <PermissionMatrix value={createPerms} onChange={setCreatePerms} />
             <TerritoryEditor value={createTerr} onChange={setCreateTerr} />
             <button onClick={create} disabled={saving} className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-teal-700 text-sm font-semibold text-white hover:bg-teal-800 disabled:bg-slate-400">

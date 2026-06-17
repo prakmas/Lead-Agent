@@ -107,13 +107,23 @@ export const followUpService = {
 };
 
 export const supervisorService = {
-  list: () => http.get<{ data: Supervisor[] }>(endpoints.admin.supervisors),
-  create: (payload: { name: string; email: string; password: string; permissions: Record<string, ModuleAccess>; territories: Territory[] }) =>
-    http.post<{ data: Supervisor }>(endpoints.admin.supervisors, payload),
-  update: (id: string, payload: { name?: string; isActive?: boolean; permissions?: Record<string, ModuleAccess>; territories?: Territory[] }) =>
+  list: () => http.get<{ data: Supervisor[]; pending: number }>(endpoints.admin.supervisors),
+  create: (payload: {
+    name: string;
+    phone: string;
+    pincode: string;
+    password: string;
+    email?: string;
+    location?: string;
+    permissions: Record<string, ModuleAccess>;
+    territories: Territory[];
+  }) => http.post<{ data: Supervisor }>(endpoints.admin.supervisors, payload),
+  update: (id: string, payload: Record<string, unknown>) =>
     http.patch<{ data: Supervisor }>(endpoints.admin.supervisor(id), payload),
   setActive: (id: string, isActive: boolean) =>
     http.patch<{ data: Supervisor }>(endpoints.admin.supervisor(id), { isActive }),
+  approve: (id: string) => http.patch<{ data: Supervisor }>(endpoints.admin.supervisor(id), { approvalStatus: "approved" }),
+  reject: (id: string) => http.patch<{ data: Supervisor }>(endpoints.admin.supervisor(id), { approvalStatus: "rejected" }),
   setPermissions: (id: string, permissions: Record<string, ModuleAccess>) =>
     http.patch<{ data: Supervisor }>(endpoints.admin.supervisor(id), { permissions }),
   setTerritories: (id: string, territories: Territory[]) =>

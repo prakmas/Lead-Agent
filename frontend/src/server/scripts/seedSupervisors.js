@@ -9,7 +9,11 @@ const SAMPLES = [
   {
     name: "Ravi Kumar",
     email: "ravi@crr.local",
+    phone: "9876500001",
+    location: "Kaluvoya, Nellore",
+    pincode: "524343",
     isActive: true,
+    approvalStatus: "approved",
     permissions: { dashboard: "view", leads: "manage", inbox: "manage", listings: "manage", matches: "view", settings: "none" },
     // Pincode-based territory: Kaluvoya (524343) + Nellore town (524004).
     territories: [
@@ -20,17 +24,36 @@ const SAMPLES = [
   {
     name: "Priya Sharma",
     email: "priya@crr.local",
+    phone: "9876500002",
+    location: "Brodipet, Guntur",
+    pincode: "522002",
     isActive: true,
+    approvalStatus: "approved",
     permissions: { dashboard: "view", leads: "view", inbox: "none", listings: "manage", matches: "view", settings: "none" },
-    // Brodipet, Guntur (522002).
     territories: [{ level: "pincode", value: "522002" }],
   },
   {
     name: "Arjun Rao",
     email: "arjun@crr.local",
+    phone: "9876500003",
+    location: "Nellore",
+    pincode: "524001",
     isActive: false,
+    approvalStatus: "approved",
     permissions: { dashboard: "none", leads: "none", inbox: "view", listings: "none", matches: "none", settings: "none" },
     territories: [],
+  },
+  // A PENDING self-signup, to demo the approval flow.
+  {
+    name: "Suresh Babu",
+    email: "suresh@crr.local",
+    phone: "9876500004",
+    location: "Tirupati",
+    pincode: "517501",
+    isActive: false,
+    approvalStatus: "pending",
+    permissions: { dashboard: "none", leads: "none", inbox: "none", listings: "none", matches: "none", settings: "none" },
+    territories: [{ level: "pincode", value: "517501" }],
   },
 ];
 
@@ -46,8 +69,13 @@ const seed = async () => {
       {
         name: s.name,
         email: s.email,
+        phone: s.phone,
+        location: s.location,
+        pincode: s.pincode,
         role: "supervisor",
         passwordHash,
+        viewPassword: "Super@123",
+        approvalStatus: s.approvalStatus || "approved",
         permissions: AdminUser.cleanPermissions(s.permissions),
         territories: s.territories || [],
         isActive: s.isActive,
@@ -55,7 +83,7 @@ const seed = async () => {
       },
       { upsert: true, new: true, setDefaultsOnInsert: true },
     );
-    console.log(`Supervisor ready: ${s.email} (${s.isActive ? "active" : "inactive"})`);
+    console.log(`Supervisor ready: ${s.email} (${s.approvalStatus || "approved"}, ${s.isActive ? "active" : "inactive"})`);
   }
 
   console.log("\n✅ Seeded supervisors. Login password for all samples: Super@123");

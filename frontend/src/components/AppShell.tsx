@@ -14,7 +14,7 @@ import {
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { ReactNode, useEffect, useMemo, useState } from "react";
-import { authService } from "@/lib/api";
+import { authService, supervisorService } from "@/lib/api";
 import { clearSession, getAdmin, getToken, saveSession } from "@/lib/auth";
 import type { AdminUser } from "@/types/api";
 import { FollowUpReminder } from "@/components/FollowUpReminder";
@@ -59,6 +59,20 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const isOwner = admin?.role === "owner" || admin?.role === "admin";
   const canInbox = isOwner || (admin?.permissions?.inbox && admin.permissions.inbox !== "none");
+  const [pendingSupervisors, setPendingSupervisors] = useState(0);
+
+  // Owner: poll for pending supervisor signups to badge the Supervisors nav.
+  useEffect(() => {
+    if (!isOwner) return;
+    const check = () =>
+      supervisorService
+        .list()
+        .then((r) => setPendingSupervisors(r.pending || 0))
+        .catch(() => {});
+    check();
+    const t = setInterval(check, 30000);
+    return () => clearInterval(t);
+  }, [isOwner]);
 
   // Visible nav = owner sees all; supervisor sees modules with view/manage.
   const visibleNav = useMemo(
@@ -76,8 +90,11 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   // Owner also gets the Supervisors (RBAC) link at the end.
   const links = isOwner
-    ? [...visibleNav, { href: "/supervisors", label: "Supervisors", icon: ShieldCheck, module: "supervisors" }]
-    : visibleNav;
+    ? [
+        ...visibleNav.map((n) => ({ ...n, badge: 0 })),
+        { href: "/supervisors", label: "Supervisors", icon: ShieldCheck, module: "supervisors", badge: pendingSupervisors },
+      ]
+    : visibleNav.map((n) => ({ ...n, badge: 0 }));
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-950">
@@ -107,6 +124,11 @@ export function AppShell({ children }: { children: ReactNode }) {
               >
                 <Icon size={18} />
                 {item.label}
+                {item.badge ? (
+                  <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold text-white">
+                    {item.badge > 9 ? "9+" : item.badge}
+                  </span>
+                ) : null}
               </Link>
             );
           })}

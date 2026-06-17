@@ -5,14 +5,26 @@ import { ACCESS_RANK, MODULE_KEYS } from "../utils/modules.js";
 const adminUserSchema = new mongoose.Schema(
   {
     name: { type: String, trim: true, default: "Admin" },
+    // Email is OPTIONAL for supervisors (they sign up / log in with phone).
+    // sparse unique → many docs can omit it without collisions.
     email: {
       type: String,
-      required: true,
       unique: true,
+      sparse: true,
       lowercase: true,
       trim: true,
     },
+    // Phone is the primary identifier for supervisors (mobile signup/login).
+    phone: { type: String, trim: true, unique: true, sparse: true },
+    location: { type: String, trim: true },
+    pincode: { type: String, trim: true }, // primary pincode (also mirrored into territories)
     passwordHash: { type: String, required: true, select: false },
+    // Admin-viewable copy of the last-set password. NOTE: storing a recoverable
+    // password is a security tradeoff acceptable for this internal admin tool —
+    // revisit (remove / make reset-only) before any public/production launch.
+    viewPassword: { type: String, select: false },
+    // Approval workflow: self-signups land as "pending" until an owner approves.
+    approvalStatus: { type: String, enum: ["pending", "approved", "rejected"], default: "approved" },
     role: {
       type: String,
       // owner = the top admin who manages supervisors (full access always)

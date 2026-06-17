@@ -23,11 +23,16 @@ export type Territory = { level: "state" | "city" | "pincode"; value: string };
 export type Supervisor = {
   _id: string;
   name: string;
-  email: string;
+  email?: string;
+  phone?: string;
+  location?: string;
+  pincode?: string;
   role: string;
   permissions: Record<string, ModuleAccess>;
   territories?: Territory[];
   isActive: boolean;
+  approvalStatus?: "pending" | "approved" | "rejected";
+  viewPassword?: string;
   lastLoginAt?: string;
   createdAt?: string;
 };
