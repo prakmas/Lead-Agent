@@ -18,12 +18,15 @@ export type AdminUser = {
   permissions?: Record<string, ModuleAccess>;
 };
 
+export type Territory = { level: "state" | "city" | "pincode"; value: string };
+
 export type Supervisor = {
   _id: string;
   name: string;
   email: string;
   role: string;
   permissions: Record<string, ModuleAccess>;
+  territories?: Territory[];
   isActive: boolean;
   lastLoginAt?: string;
   createdAt?: string;

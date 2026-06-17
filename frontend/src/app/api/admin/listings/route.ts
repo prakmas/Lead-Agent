@@ -2,14 +2,15 @@ import Listing from "@/server/models/Listing.js";
 import { requireApiAccess } from "@/server/auth.js";
 import { route, json, parseListQuery, paginate } from "@/server/http.js";
 import { triggerRematchForNewListing } from "@/server/services/followUp.service.js";
+import { territoryListingQuery } from "@/server/utils/territory.js";
 import createHttpError from "@/server/utils/createHttpError.js";
 
 export const dynamic = "force-dynamic";
 
 export const GET = route(async (request: Request) => {
-  await requireApiAccess(request);
+  const admin = await requireApiAccess(request);
   const options = parseListQuery(request);
-  const query: Record<string, unknown> = {};
+  const query: Record<string, unknown> = { ...territoryListingQuery(admin) };
   if (options.get("status")) query.status = options.get("status");
   if (options.get("category")) query.category = new RegExp(options.get("category") as string, "i");
   if (options.search) query.$text = { $search: options.search };
@@ -24,11 +25,11 @@ export const GET = route(async (request: Request) => {
 });
 
 export const POST = route(async (request: Request) => {
-  await requireApiAccess(request);
+  const admin = await requireApiAccess(request);
   const body = await request.json();
   if (!body.title || !body.category) throw createHttpError(400, "Title and category are required");
 
-  const listing = await Listing.create(body);
+  const listing = await Listing.create({ ...body, createdBy: admin._id });
 
   // Notify any matching active leads (runs in the background).
   triggerRematchForNewListing(listing)

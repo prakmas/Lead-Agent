@@ -23,6 +23,17 @@ const adminUserSchema = new mongoose.Schema(
     // Per-module access for supervisors: { leads: "manage", inbox: "view", ... }.
     // Ignored for owner/admin (they have full access).
     permissions: { type: mongoose.Schema.Types.Mixed, default: {} },
+    // Geographic territories a supervisor manages. A listing belongs to a
+    // supervisor if its state/city/pincode matches any of these.
+    territories: {
+      type: [
+        new mongoose.Schema(
+          { level: { type: String, enum: ["state", "city", "pincode"] }, value: { type: String, trim: true } },
+          { _id: false },
+        ),
+      ],
+      default: [],
+    },
     // Which owner created this supervisor.
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "AdminUser" },
     isActive: { type: Boolean, default: true },

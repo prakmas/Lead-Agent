@@ -1,6 +1,7 @@
 import AdminUser from "@/server/models/AdminUser.js";
 import { requireOwner } from "@/server/auth.js";
 import { route, json } from "@/server/http.js";
+import { normalizeTerritories } from "@/server/utils/territory.js";
 import createHttpError from "@/server/utils/createHttpError.js";
 
 export const dynamic = "force-dynamic";
@@ -15,7 +16,7 @@ const Users = AdminUser as unknown as {
 export const GET = route(async (request: Request) => {
   await requireOwner(request);
   const supervisors = await AdminUser.find({ role: "supervisor" })
-    .select("name email role permissions isActive lastLoginAt createdAt")
+    .select("name email role permissions territories isActive lastLoginAt createdAt")
     .sort({ createdAt: -1 });
   return json({ data: supervisors });
 });
@@ -23,7 +24,7 @@ export const GET = route(async (request: Request) => {
 // Create a supervisor account with a password and module permissions.
 export const POST = route(async (request: Request) => {
   const owner = await requireOwner(request);
-  const { name, email, password, permissions = {} } = await request.json();
+  const { name, email, password, permissions = {}, territories = [] } = await request.json();
 
   if (!name || !email || !password) throw createHttpError(400, "Name, email and password are required");
   if (String(password).length < 6) throw createHttpError(400, "Password must be at least 6 characters");
@@ -38,6 +39,7 @@ export const POST = route(async (request: Request) => {
     passwordHash: await Users.hashPassword(password),
     role: "supervisor",
     permissions: Users.cleanPermissions(permissions),
+    territories: normalizeTerritories(territories),
     createdBy: owner._id,
     isActive: true,
   });
@@ -50,6 +52,7 @@ export const POST = route(async (request: Request) => {
         email: supervisor.email,
         role: supervisor.role,
         permissions: supervisor.permissions,
+        territories: supervisor.territories,
         isActive: supervisor.isActive,
         createdAt: supervisor.createdAt,
       },

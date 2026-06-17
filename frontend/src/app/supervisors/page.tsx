@@ -1,14 +1,21 @@
 "use client";
 
-import { CheckCircle, KeyRound, Power, ShieldCheck, Trash2, UserPlus, X } from "lucide-react";
+import { CheckCircle, KeyRound, MapPin, Power, ShieldCheck, Trash2, UserPlus, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { PageHeader } from "@/components/PageHeader";
 import { PermissionMatrix } from "@/components/PermissionMatrix";
+import { TerritoryEditor } from "@/components/TerritoryEditor";
 import { PageLoader } from "@/components/Loader";
 import { supervisorService } from "@/lib/api";
 import { accessStyles, emptyPermissions, MODULES } from "@/lib/modules";
-import type { ModuleAccess, Supervisor } from "@/types/api";
+import type { ModuleAccess, Supervisor, Territory } from "@/types/api";
+
+const territoryStyles: Record<string, string> = {
+  state: "bg-violet-50 text-violet-700 ring-1 ring-violet-200",
+  city: "bg-sky-50 text-sky-700 ring-1 ring-sky-200",
+  pincode: "bg-amber-50 text-amber-700 ring-1 ring-amber-200",
+};
 
 const initials = (name: string) =>
   name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("") || "?";
@@ -23,11 +30,16 @@ export default function SupervisorsPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState({ name: "", email: "", password: "" });
   const [createPerms, setCreatePerms] = useState<Record<string, ModuleAccess>>(emptyPermissions());
+  const [createTerr, setCreateTerr] = useState<Territory[]>([]);
   const [saving, setSaving] = useState(false);
 
   // Edit access
   const [editing, setEditing] = useState<Supervisor | null>(null);
   const [editPerms, setEditPerms] = useState<Record<string, ModuleAccess>>(emptyPermissions());
+
+  // Edit territory
+  const [terrTarget, setTerrTarget] = useState<Supervisor | null>(null);
+  const [terrValue, setTerrValue] = useState<Territory[]>([]);
 
   // Reset password
   const [pwTarget, setPwTarget] = useState<Supervisor | null>(null);
@@ -57,10 +69,11 @@ export default function SupervisorsPage() {
     }
     setSaving(true);
     try {
-      await supervisorService.create({ ...form, permissions: createPerms });
+      await supervisorService.create({ ...form, permissions: createPerms, territories: createTerr });
       setShowCreate(false);
       setForm({ name: "", email: "", password: "" });
       setCreatePerms(emptyPermissions());
+      setCreateTerr([]);
       await load();
       flash("Supervisor account created");
     } catch (e) {
@@ -80,6 +93,21 @@ export default function SupervisorsPage() {
       flash("Access updated");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to update access");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveTerritory = async () => {
+    if (!terrTarget) return;
+    setSaving(true);
+    try {
+      await supervisorService.setTerritories(terrTarget._id, terrValue);
+      setTerrTarget(null);
+      await load();
+      flash("Territory updated");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to update territory");
     } finally {
       setSaving(false);
     }
@@ -192,6 +220,20 @@ export default function SupervisorsPage() {
                 })}
               </div>
 
+              {/* Territory summary */}
+              <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                <MapPin size={12} className="text-slate-400" />
+                {s.territories && s.territories.length > 0 ? (
+                  s.territories.map((t) => (
+                    <span key={`${t.level}-${t.value}`} className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${territoryStyles[t.level]}`}>
+                      {t.value}
+                    </span>
+                  ))
+                ) : (
+                  <span className="text-[11px] italic text-slate-400">No territory assigned (sees no listings)</span>
+                )}
+              </div>
+
               {/* Actions */}
               <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
                 <button
@@ -203,6 +245,16 @@ export default function SupervisorsPage() {
                   className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 px-2.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
                 >
                   <ShieldCheck size={13} /> Edit access
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTerrTarget(s);
+                    setTerrValue(s.territories || []);
+                  }}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 px-2.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                >
+                  <MapPin size={13} /> Territory
                 </button>
                 <button
                   type="button"
@@ -240,8 +292,21 @@ export default function SupervisorsPage() {
             <input className={field} placeholder="Email *" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
             <input className={field} placeholder="Password * (min 6 chars)" type="text" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
             <PermissionMatrix value={createPerms} onChange={setCreatePerms} />
+            <TerritoryEditor value={createTerr} onChange={setCreateTerr} />
             <button onClick={create} disabled={saving} className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-teal-700 text-sm font-semibold text-white hover:bg-teal-800 disabled:bg-slate-400">
               <UserPlus size={16} /> {saving ? "Creating…" : "Create supervisor"}
+            </button>
+          </div>
+        </Modal>
+      ) : null}
+
+      {/* ── Edit territory modal ── */}
+      {terrTarget ? (
+        <Modal title={`Territory — ${terrTarget.name}`} onClose={() => setTerrTarget(null)}>
+          <div className="space-y-3">
+            <TerritoryEditor value={terrValue} onChange={setTerrValue} />
+            <button onClick={saveTerritory} disabled={saving} className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-teal-700 text-sm font-semibold text-white hover:bg-teal-800 disabled:bg-slate-400">
+              <CheckCircle size={16} /> {saving ? "Saving…" : "Save territory"}
             </button>
           </div>
         </Modal>

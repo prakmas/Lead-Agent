@@ -10,19 +10,22 @@ const SAMPLES = [
     name: "Ravi Kumar",
     email: "ravi@crr.local",
     isActive: true,
-    permissions: { dashboard: "view", leads: "manage", inbox: "manage", listings: "view", matches: "view", settings: "none" },
+    permissions: { dashboard: "view", leads: "manage", inbox: "manage", listings: "manage", matches: "view", settings: "none" },
+    territories: [{ level: "city", value: "Nellore" }],
   },
   {
     name: "Priya Sharma",
     email: "priya@crr.local",
     isActive: true,
     permissions: { dashboard: "view", leads: "view", inbox: "none", listings: "manage", matches: "view", settings: "none" },
+    territories: [{ level: "state", value: "Andhra Pradesh" }],
   },
   {
     name: "Arjun Rao",
     email: "arjun@crr.local",
     isActive: false,
     permissions: { dashboard: "none", leads: "none", inbox: "view", listings: "none", matches: "none", settings: "none" },
+    territories: [],
   },
 ];
 
@@ -41,6 +44,7 @@ const seed = async () => {
         role: "supervisor",
         passwordHash,
         permissions: AdminUser.cleanPermissions(s.permissions),
+        territories: s.territories || [],
         isActive: s.isActive,
         createdBy: owner?._id,
       },

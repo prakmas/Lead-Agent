@@ -30,12 +30,18 @@ const listingSchema = new mongoose.Schema(
       enum: ["active", "inactive", "matched", "archived"],
       default: "active",
     },
+    // Which admin/supervisor added this listing (territory attribution).
+    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "AdminUser" },
     metadata: { type: mongoose.Schema.Types.Mixed, default: {} },
   },
   { timestamps: true },
 );
 
 listingSchema.index({ status: 1, category: 1, location: 1, budget: 1 });
+// Territory scoping reads these metadata fields.
+listingSchema.index({ "metadata.state": 1 });
+listingSchema.index({ "metadata.city": 1 });
+listingSchema.index({ "metadata.pincode": 1 });
 listingSchema.index({
   title: "text",
   description: "text",

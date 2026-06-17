@@ -14,6 +14,7 @@ import type {
   Paginated,
   PincodeResult,
   Supervisor,
+  Territory,
 } from "@/types/api";
 import { http, type QueryParams } from "./client";
 import { endpoints } from "./endpoints";
@@ -102,14 +103,16 @@ export const followUpService = {
 
 export const supervisorService = {
   list: () => http.get<{ data: Supervisor[] }>(endpoints.admin.supervisors),
-  create: (payload: { name: string; email: string; password: string; permissions: Record<string, ModuleAccess> }) =>
+  create: (payload: { name: string; email: string; password: string; permissions: Record<string, ModuleAccess>; territories: Territory[] }) =>
     http.post<{ data: Supervisor }>(endpoints.admin.supervisors, payload),
-  update: (id: string, payload: { name?: string; isActive?: boolean; permissions?: Record<string, ModuleAccess> }) =>
+  update: (id: string, payload: { name?: string; isActive?: boolean; permissions?: Record<string, ModuleAccess>; territories?: Territory[] }) =>
     http.patch<{ data: Supervisor }>(endpoints.admin.supervisor(id), payload),
   setActive: (id: string, isActive: boolean) =>
     http.patch<{ data: Supervisor }>(endpoints.admin.supervisor(id), { isActive }),
   setPermissions: (id: string, permissions: Record<string, ModuleAccess>) =>
     http.patch<{ data: Supervisor }>(endpoints.admin.supervisor(id), { permissions }),
+  setTerritories: (id: string, territories: Territory[]) =>
+    http.patch<{ data: Supervisor }>(endpoints.admin.supervisor(id), { territories }),
   setPassword: (id: string, password: string) =>
     http.post<{ message: string }>(endpoints.admin.supervisorPassword(id), { password }),
   revoke: (id: string) => http.del<{ message: string }>(endpoints.admin.supervisor(id)),

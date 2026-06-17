@@ -3,6 +3,8 @@ import { requireOwner } from "@/server/auth.js";
 import { route, json } from "@/server/http.js";
 import createHttpError from "@/server/utils/createHttpError.js";
 
+import { normalizeTerritories } from "@/server/utils/territory.js";
+
 export const dynamic = "force-dynamic";
 
 const Users = AdminUser as unknown as { cleanPermissions(input: Record<string, string>): Record<string, string> };
@@ -23,6 +25,9 @@ export const PATCH = route(async (request: Request, ctx: Ctx) => {
     supervisor.permissions = Users.cleanPermissions(body.permissions);
     supervisor.markModified("permissions");
   }
+  if (Array.isArray(body.territories)) {
+    supervisor.territories = normalizeTerritories(body.territories);
+  }
   await supervisor.save();
 
   return json({
@@ -32,6 +37,7 @@ export const PATCH = route(async (request: Request, ctx: Ctx) => {
       email: supervisor.email,
       role: supervisor.role,
       permissions: supervisor.permissions,
+      territories: supervisor.territories,
       isActive: supervisor.isActive,
       lastLoginAt: supervisor.lastLoginAt,
       createdAt: supervisor.createdAt,
