@@ -131,7 +131,7 @@ export function NotificationBell() {
 
           <div className="max-h-80 overflow-y-auto">
             {items.length === 0 ? (
-              <p className="px-4 py-8 text-center text-sm text-slate-400">No new messages 🎉</p>
+              <p className="px-4 py-8 text-center text-sm text-slate-400">You&apos;re all caught up</p>
             ) : (
               items.map((c) => (
                 <button
