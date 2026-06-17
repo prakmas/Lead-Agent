@@ -280,7 +280,7 @@ export default function ListingsPage() {
         state: appliedGeo.state || undefined,
         district: appliedGeo.district || undefined,
         area: appliedGeo.area || undefined,
-        pincode: appliedGeo.pincode || undefined,
+        pincode: appliedGeo.pincodes.length ? appliedGeo.pincodes.join(",") : undefined,
       });
       setListings(result.data);
     } finally {
@@ -305,14 +305,14 @@ export default function ListingsPage() {
 
   // When a location is selected, only show supervisors who cover it (territory
   // value matches the chosen state / district / pincode).
-  const locActive = geoFilter.state || geoFilter.district || geoFilter.pincode;
+  const locActive = geoFilter.state || geoFilter.district || geoFilter.pincodes.length > 0;
   const shownSupervisors = locActive
     ? supervisors.filter((s) =>
         (s.territories || []).some(
           (t) =>
             (t.level === "state" && t.value === geoFilter.state) ||
             (t.level === "city" && t.value === geoFilter.district) ||
-            (t.level === "pincode" && t.value === geoFilter.pincode),
+            (t.level === "pincode" && geoFilter.pincodes.includes(t.value)),
         ),
       )
     : supervisors;

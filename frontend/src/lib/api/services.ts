@@ -67,7 +67,10 @@ export const listingService = {
     http.patch<Listing>(endpoints.admin.listing(id), payload),
   remove: (id: string) => http.del<{ message?: string }>(endpoints.admin.listing(id)),
   facets: (query?: QueryParams) =>
-    http.get<{ states: string[]; districts: string[]; areas: string[] }>(endpoints.admin.listingFacets, { query }),
+    http.get<{ states: string[]; districts: string[]; areas: string[]; pincodes: string[] }>(
+      endpoints.admin.listingFacets,
+      { query },
+    ),
 };
 
 export const matchService = {

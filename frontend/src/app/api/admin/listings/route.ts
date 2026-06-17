@@ -30,7 +30,13 @@ export const GET = route(async (request: Request) => {
   if (options.get("state")) query["metadata.state"] = options.get("state");
   if (options.get("district")) query["metadata.city"] = options.get("district");
   if (options.get("area")) query["metadata.area"] = options.get("area");
-  if (options.get("pincode")) query["metadata.pincode"] = options.get("pincode");
+  // Pincode supports multi-select (comma-separated → $in).
+  const pincode = options.get("pincode");
+  if (pincode) {
+    const pins = pincode.split(",").map((p) => p.trim()).filter(Boolean);
+    if (pins.length === 1) query["metadata.pincode"] = pins[0];
+    else if (pins.length > 1) query["metadata.pincode"] = { $in: pins };
+  }
 
   // Flexible free-text place filter — matches pincode / state / district / mandal
   // / village (area) or the flat location string, case-insensitively.

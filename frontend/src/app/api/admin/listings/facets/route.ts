@@ -10,14 +10,17 @@ const sortStrings = (arr: unknown[]) =>
 
 // Cascading filter options sourced from the listings themselves (so every option
 // is guaranteed to return results) and scoped to the supervisor's territory.
-//   GET /admin/listings/facets                  → { states }
-//   GET /admin/listings/facets?state=X          → { states, districts }
-//   GET /admin/listings/facets?state=X&district=Y → { states, districts, areas }
+//   states  → always
+//   districts → if state
+//   areas   → if state + district
+//   pincodes → if state (narrowed by district/area when provided) — for the
+//              multi-select pincode dropdown
 export const GET = route(async (request: Request) => {
   const admin = await requireApiAccess(request);
   const params = new URL(request.url).searchParams;
   const state = params.get("state") || "";
   const district = params.get("district") || "";
+  const area = params.get("area") || "";
 
   const base = territoryListingQuery(admin) as Record<string, unknown>;
 
@@ -35,5 +38,13 @@ export const GET = route(async (request: Request) => {
     );
   }
 
-  return json({ states, districts, areas });
+  let pincodes: string[] = [];
+  if (state) {
+    const scope: Record<string, unknown> = { ...base, "metadata.state": state };
+    if (district) scope["metadata.city"] = district;
+    if (area) scope["metadata.area"] = area;
+    pincodes = sortStrings(await Listing.distinct("metadata.pincode", scope));
+  }
+
+  return json({ states, districts, areas, pincodes });
 });
