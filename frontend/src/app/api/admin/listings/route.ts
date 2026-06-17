@@ -21,7 +21,10 @@ export const GET = route(async (request: Request) => {
   if (terr.$or) and.push({ $or: terr.$or });
   else if (terr._id === null) query._id = null; // supervisor with no territory → nothing
 
-  if (options.get("status")) query.status = options.get("status");
+  // Hide soft-deleted (archived) listings unless explicitly requested.
+  if (options.get("archived") === "true") query.status = "archived";
+  else if (options.get("status")) query.status = options.get("status");
+  else query.status = { $ne: "archived" };
   if (options.get("category")) query.category = new RegExp(options.get("category") as string, "i");
   // Filter by the supervisor who created the listing (admin oversight).
   if (options.get("createdBy")) query.createdBy = options.get("createdBy");
@@ -64,6 +67,7 @@ export const GET = route(async (request: Request) => {
     Listing.find(query)
       .select("-images")
       .populate({ path: "createdBy", select: "name email role" })
+      .populate({ path: "deletedBy", select: "name email role" })
       .sort({ createdAt: -1 }),
     Listing.countDocuments(query),
     options,

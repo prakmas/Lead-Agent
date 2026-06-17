@@ -51,13 +51,22 @@ export const PATCH = route(async (request: Request, ctx: Ctx) => {
   return json(listing);
 });
 
+// Soft-delete — keep the record (archived) with a reason for audit.
 export const DELETE = route(async (request: Request, ctx: Ctx) => {
   const admin = (await requireApiAccess(request)) as Admin;
   const { id } = await ctx.params;
-  const existing = await Listing.findById(id);
+  const existing = (await Listing.findById(id)) as
+    | (WithCreator & { status: string; deletedAt?: Date; deletedBy?: unknown; deleteReason?: string; save: () => Promise<unknown> })
+    | null;
   if (!existing) throw createHttpError(404, "Listing not found");
-  ensureCanManage(admin, existing as WithCreator);
+  ensureCanManage(admin, existing);
 
-  await Listing.findByIdAndDelete(id);
-  return json({ message: "Listing deleted" });
+  const body = (await request.json().catch(() => ({}))) as { reason?: string };
+  existing.status = "archived";
+  existing.deletedAt = new Date();
+  existing.deletedBy = admin._id;
+  existing.deleteReason = (body.reason || "").trim();
+  await existing.save();
+
+  return json({ message: "Listing deleted", id });
 });

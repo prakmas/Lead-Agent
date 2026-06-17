@@ -134,6 +134,9 @@ export type Listing = {
   services?: string;
   metadata?: { country?: string; state?: string; city?: string; area?: string; pincode?: string };
   createdBy?: { _id: string; name?: string; email?: string; role?: string } | string | null;
+  deletedAt?: string;
+  deletedBy?: { _id: string; name?: string; email?: string } | string | null;
+  deleteReason?: string;
   status: string;
   createdAt: string;
 };

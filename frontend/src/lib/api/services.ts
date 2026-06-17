@@ -65,7 +65,8 @@ export const listingService = {
   create: (payload: Record<string, unknown>) => http.post<Listing>(endpoints.admin.listings, payload),
   update: (id: string, payload: Record<string, unknown>) =>
     http.patch<Listing>(endpoints.admin.listing(id), payload),
-  remove: (id: string) => http.del<{ message?: string }>(endpoints.admin.listing(id)),
+  remove: (id: string, reason?: string) =>
+    http.del<{ message?: string }>(endpoints.admin.listing(id), { body: { reason } }),
   facets: (query?: QueryParams) =>
     http.get<{ states: string[]; districts: string[]; areas: string[]; pincodes: string[] }>(
       endpoints.admin.listingFacets,

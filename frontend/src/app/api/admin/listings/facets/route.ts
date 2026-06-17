@@ -22,7 +22,7 @@ export const GET = route(async (request: Request) => {
   const district = params.get("district") || "";
   const area = params.get("area") || "";
 
-  const base = territoryListingQuery(admin) as Record<string, unknown>;
+  const base = { ...(territoryListingQuery(admin) as Record<string, unknown>), status: { $ne: "archived" } };
 
   const states = sortStrings(await Listing.distinct("metadata.state", base));
 
