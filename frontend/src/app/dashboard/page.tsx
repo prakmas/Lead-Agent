@@ -22,7 +22,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { PageLoader } from "@/components/Loader";
 import { statsService } from "@/lib/api";
 import { getAdmin } from "@/lib/auth";
-import type { Lead, LeadStatus } from "@/types/api";
+import type { AdminUser, Lead, LeadStatus } from "@/types/api";
 
 type Stats = {
   totals: {
@@ -62,10 +62,13 @@ export default function DashboardPage() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
-  const admin = getAdmin();
+  // Read the admin only after mount — getAdmin() reads localStorage which is
+  // absent during SSR, so using it at render causes a hydration mismatch.
+  const [admin, setAdmin] = useState<AdminUser | null>(null);
   const isOwner = admin?.role === "owner" || admin?.role === "admin";
 
   useEffect(() => {
+    setAdmin(getAdmin());
     statsService
       .get<Stats>()
       .then(setStats)
