@@ -12,6 +12,8 @@ export const GET = route(async (request: Request) => {
   const query: Record<string, unknown> = {};
   if (options.get("status")) query.status = options.get("status");
   if (options.get("channel")) query.channel = options.get("channel");
+  if (options.get("followUp") === "active") query["followUp.active"] = true;
+  if (options.get("tag")) query["followUp.tag"] = options.get("tag");
   if (options.search) query.$text = { $search: options.search };
 
   const result = await paginate(

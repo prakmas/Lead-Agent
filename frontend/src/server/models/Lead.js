@@ -15,6 +15,19 @@ const requirementsSchema = new mongoose.Schema(
   { _id: false },
 );
 
+// Admin-set follow-up reminder. While `active` is true the admin gets a popup
+// every few minutes until they change the lead status or mark it done.
+const followUpSchema = new mongoose.Schema(
+  {
+    active: { type: Boolean, default: false },
+    tag: { type: String, trim: true }, // colored reason, e.g. "call-back", "hot-lead"
+    note: { type: String, trim: true },
+    createdAt: Date,
+    completedAt: Date,
+  },
+  { _id: false },
+);
+
 const leadSchema = new mongoose.Schema(
   {
     contact: { type: mongoose.Schema.Types.ObjectId, ref: "Contact" },
@@ -33,6 +46,7 @@ const leadSchema = new mongoose.Schema(
       default: "New",
     },
     requirements: { type: requirementsSchema, default: {} },
+    followUp: { type: followUpSchema, default: () => ({}) },
     missingFields: [{ type: String, trim: true }],
     lastMatchedAt: Date,
     metadata: { type: mongoose.Schema.Types.Mixed, default: {} },
@@ -41,6 +55,7 @@ const leadSchema = new mongoose.Schema(
 );
 
 leadSchema.index({ status: 1, createdAt: -1 });
+leadSchema.index({ "followUp.active": 1 });
 leadSchema.index({
   title: "text",
   intent: "text",

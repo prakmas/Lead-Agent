@@ -40,6 +40,20 @@ export const leadService = {
   list: (query?: QueryParams) => http.get<Paginated<Lead>>(endpoints.admin.leads, { query }),
   update: (id: string, payload: Record<string, unknown>) =>
     http.patch<Lead>(endpoints.admin.lead(id), payload),
+  // Leads with an open follow-up reminder (drives the reminder popup + filter).
+  activeFollowUps: () =>
+    http.get<Paginated<Lead>>(endpoints.admin.leads, { query: { followUp: "active", limit: 100 } }),
+  // Start/replace a follow-up reminder on a lead.
+  setFollowUp: (id: string, tag: string, note = "") =>
+    http.patch<Lead>(endpoints.admin.lead(id), {
+      followUp: { active: true, tag, note, createdAt: new Date().toISOString() },
+    }),
+  // Resolve a follow-up (stops the reminder); optionally also move the status.
+  completeFollowUp: (id: string, status?: string) =>
+    http.patch<Lead>(endpoints.admin.lead(id), {
+      ...(status ? { status } : {}),
+      followUp: { active: false, completedAt: new Date().toISOString() },
+    }),
 };
 
 export const listingService = {

@@ -15,6 +15,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { ReactNode, useEffect, useState } from "react";
 import { clearSession, getAdmin, getToken } from "@/lib/auth";
 import type { AdminUser } from "@/types/api";
+import { FollowUpReminder } from "@/components/FollowUpReminder";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -120,6 +121,9 @@ export function AppShell({ children }: { children: ReactNode }) {
 
         <main className="px-4 py-6 sm:px-6">{children}</main>
       </div>
+
+      {/* App-wide follow-up reminder popup */}
+      <FollowUpReminder />
     </div>
   );
 }

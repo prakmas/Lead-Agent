@@ -52,6 +52,13 @@ export type Lead = {
     keywords?: string[];
     rawText?: string;
   };
+  followUp?: {
+    active?: boolean;
+    tag?: string;
+    note?: string;
+    createdAt?: string;
+    completedAt?: string;
+  };
   createdAt: string;
 };
 

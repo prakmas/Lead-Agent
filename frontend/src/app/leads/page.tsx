@@ -4,6 +4,7 @@ import { RefreshCw } from "lucide-react";
 import { ChangeEvent, useCallback, useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { ChannelBadge } from "@/components/ChannelBadge";
+import { FollowUpControl } from "@/components/FollowUpControl";
 import { PageHeader } from "@/components/PageHeader";
 import { StatusBadge } from "@/components/StatusBadge";
 import { leadService } from "@/lib/api";
@@ -15,12 +16,13 @@ export default function LeadsPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
+  const [followUp, setFollowUp] = useState(""); // "" | "active"
   const [error, setError] = useState("");
 
   const loadLeads = useCallback(async () => {
-    const result = await leadService.list({ search, status });
+    const result = await leadService.list({ search, status, followUp: followUp || undefined });
     setLeads(result.data);
-  }, [search, status]);
+  }, [search, status, followUp]);
 
   useEffect(() => {
     let isMounted = true;
@@ -83,6 +85,20 @@ export default function LeadsPage() {
             </option>
           ))}
         </select>
+        <select
+          value={followUp}
+          onChange={(event) => {
+            setFollowUp(event.target.value);
+            leadService
+              .list({ search, status, followUp: event.target.value || undefined })
+              .then((r) => setLeads(r.data))
+              .catch((err) => setError(err.message));
+          }}
+          className="h-10 rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-teal-600"
+        >
+          <option value="">All leads</option>
+          <option value="active">Needs follow-up</option>
+        </select>
         <button
           type="button"
           onClick={() => loadLeads().catch((err) => setError(err.message))}
@@ -103,6 +119,7 @@ export default function LeadsPage() {
                 <th className="px-4 py-3">Channel</th>
                 <th className="px-4 py-3">Location</th>
                 <th className="px-4 py-3">Budget</th>
+                <th className="px-4 py-3">Follow-up</th>
                 <th className="px-4 py-3">Status</th>
               </tr>
             </thead>
@@ -119,6 +136,9 @@ export default function LeadsPage() {
                   <td className="px-4 py-3 text-slate-600">{lead.requirements?.location || "-"}</td>
                   <td className="px-4 py-3 text-slate-600">
                     {lead.requirements?.budgetMax ? `₹${lead.requirements.budgetMax}` : "-"}
+                  </td>
+                  <td className="px-4 py-3">
+                    <FollowUpControl lead={lead} onChange={() => loadLeads().catch((err) => setError(err.message))} />
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
