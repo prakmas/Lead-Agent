@@ -260,9 +260,9 @@ export default function ConversationsPage() {
         </div>
       ) : null}
 
-      <div className="grid min-h-[720px] grid-cols-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm lg:grid-cols-[300px_minmax(0,1fr)] xl:grid-cols-[300px_minmax(0,1fr)_340px]">
+      <div className="grid grid-cols-1 rounded-xl border border-slate-200 bg-white shadow-sm lg:h-[calc(100dvh-11rem)] lg:grid-cols-[300px_minmax(0,1fr)] lg:overflow-hidden xl:grid-cols-[300px_minmax(0,1fr)_340px]">
         {/* ── Conversation list ─────────────────────────────────────────── */}
-        <aside className="flex flex-col border-r border-slate-200">
+        <aside className="flex min-h-0 flex-col border-b border-slate-200 lg:border-b-0 lg:border-r">
           <div className="space-y-2 border-b border-slate-200 p-3">
             <div className="flex h-10 items-center gap-2 rounded-md border border-slate-200 px-3">
               <Search size={16} className="text-slate-400" />
@@ -287,7 +287,7 @@ export default function ConversationsPage() {
             </select>
           </div>
 
-          <div className="max-h-[640px] flex-1 divide-y divide-slate-100 overflow-y-auto">
+          <div className="max-h-[55vh] min-h-0 flex-1 divide-y divide-slate-100 overflow-y-auto lg:max-h-none">
             {filtered.length === 0 ? (
               <p className="p-6 text-center text-sm text-slate-400">No conversations</p>
             ) : null}
@@ -341,7 +341,7 @@ export default function ConversationsPage() {
         </aside>
 
         {/* ── Chat thread ───────────────────────────────────────────────── */}
-        <section className="flex min-h-[400px] flex-col">
+        <section className="flex h-[70vh] min-h-0 flex-col border-b border-slate-200 lg:h-auto lg:border-b-0">
           {!selected ? (
             <div className="flex flex-1 items-center justify-center text-sm text-slate-400">
               Select a conversation
@@ -397,7 +397,7 @@ export default function ConversationsPage() {
                 </div>
               ) : null}
 
-              <div className="flex-1 space-y-2.5 overflow-y-auto bg-slate-50 p-5">
+              <div className="min-h-0 flex-1 space-y-2.5 overflow-y-auto bg-slate-50 p-5">
                 {messages.length === 0 ? (
                   <p className="text-center text-sm text-slate-400">No messages yet</p>
                 ) : null}
@@ -416,7 +416,9 @@ export default function ConversationsPage() {
                     >
                       <p className="whitespace-pre-line">{m.text || "[non-text message]"}</p>
                       <div className={`mt-1.5 flex items-center gap-1.5 text-[10px] ${out ? "text-teal-100" : "text-slate-400"}`}>
-                        <span>{new Date(m.createdAt).toLocaleString()}</span>
+                        <span title={new Date(m.createdAt).toLocaleString()}>
+                          {new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                        </span>
                         {out ? (
                           <>
                             <span>·</span>
@@ -467,7 +469,7 @@ export default function ConversationsPage() {
         </section>
 
         {/* ── Customer details ──────────────────────────────────────────── */}
-        <aside className="hidden flex-col gap-4 overflow-y-auto border-l border-slate-200 bg-slate-50/50 p-4 xl:flex">
+        <aside className="hidden min-h-0 flex-col gap-4 overflow-y-auto border-l border-slate-200 bg-slate-50/50 p-4 xl:flex">
           {!selected ? (
             <p className="text-sm text-slate-400">No customer selected</p>
           ) : (
