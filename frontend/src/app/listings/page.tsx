@@ -3,6 +3,7 @@
 import { CheckCircle, ImageOff, Pencil, Plus, RefreshCw, Trash2, X } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
+import { CategorySelect, type CategoryGroup } from "@/components/CategorySelect";
 import { ImageUploader } from "@/components/ImageUploader";
 import { LocationPicker, type LocationValue } from "@/components/LocationPicker";
 import { MapPicker, type GeoValue } from "@/components/MapPicker";
@@ -13,7 +14,7 @@ import type { Listing, Paginated } from "@/types/api";
 
 // A broad, real-world catalogue of categories grouped for an easy dropdown.
 // `value` is a stable lowercase slug stored on the listing; `label` is shown.
-const CATEGORY_GROUPS: [string, [string, string][]][] = [
+const CATEGORY_GROUPS: CategoryGroup[] = [
   ["Housing & Stay", [
     ["flat", "Flat / Apartment"],
     ["pg", "PG / Hostel"],
@@ -332,15 +333,11 @@ export default function ListingsPage() {
 
           <div className="mt-4 space-y-3">
             <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className={field} placeholder="Title *" required />
-            <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className={field}>
-              {CATEGORY_GROUPS.map(([group, items]) => (
-                <optgroup key={group} label={group}>
-                  {items.map(([val, label]) => (
-                    <option key={val} value={val}>{label}</option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
+            <CategorySelect
+              groups={CATEGORY_GROUPS}
+              value={form.category}
+              onChange={(category) => setForm({ ...form, category })}
+            />
 
             <div>
               <p className="mb-1 text-xs font-semibold text-slate-500">Photos</p>
