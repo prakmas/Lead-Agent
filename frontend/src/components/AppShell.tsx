@@ -20,6 +20,7 @@ import { clearSession, getAdmin, getToken, saveSession } from "@/lib/auth";
 import type { AdminUser } from "@/types/api";
 import { FollowUpReminder } from "@/components/FollowUpReminder";
 import { NotificationBell } from "@/components/NotificationBell";
+import { WhatsAppHealthBanner } from "@/components/WhatsAppHealthBanner";
 
 // Each nav item maps to a module key — supervisors only see modules they can
 // access. The owner sees everything plus Supervisors (RBAC management).
@@ -182,6 +183,8 @@ export function AppShell({ children }: { children: ReactNode }) {
             );
           })}
         </nav>
+
+        <WhatsAppHealthBanner />
 
         <main className="px-4 py-6 sm:px-6">{children}</main>
       </div>
