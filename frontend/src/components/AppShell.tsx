@@ -15,6 +15,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { ReactNode, useEffect, useState } from "react";
 import { clearSession, getAdmin, getToken } from "@/lib/auth";
 import type { AdminUser } from "@/types/api";
+import { WhatsAppHealthBanner } from "./WhatsAppHealthBanner";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -117,6 +118,8 @@ export function AppShell({ children }: { children: ReactNode }) {
             );
           })}
         </nav>
+
+        <WhatsAppHealthBanner />
 
         <main className="px-4 py-6 sm:px-6">{children}</main>
       </div>
