@@ -2,19 +2,23 @@
 
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
+import { PageLoader } from "@/components/Loader";
 import { PageHeader } from "@/components/PageHeader";
 import { StatusBadge } from "@/components/StatusBadge";
-import { api } from "@/lib/api";
-import type { Match, Paginated } from "@/types/api";
+import { matchService } from "@/lib/api";
+import type { Match } from "@/types/api";
 
 export default function MatchesPage() {
   const [matches, setMatches] = useState<Match[]>([]);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api<Paginated<Match>>("/admin/matches")
+    matchService
+      .list()
       .then((result) => setMatches(result.data))
-      .catch((err) => setError(err.message));
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false));
   }, []);
 
   return (
@@ -23,6 +27,13 @@ export default function MatchesPage() {
 
       {error ? <div className="mb-4 rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</div> : null}
 
+      {loading ? (
+        <PageLoader label="Loading matches…" />
+      ) : matches.length === 0 ? (
+        <p className="rounded-lg border border-dashed border-slate-300 bg-white p-10 text-center text-sm text-slate-400">
+          No matches yet.
+        </p>
+      ) : (
       <div className="grid gap-4">
         {matches.map((match) => (
           <article key={match._id} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
@@ -55,6 +66,7 @@ export default function MatchesPage() {
           </article>
         ))}
       </div>
+      )}
     </AppShell>
   );
 }

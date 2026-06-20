@@ -85,9 +85,12 @@ export const buildMatchReply = (matches, requirements = {}) => {
   }
 
   const lines = matches.slice(0, 3).map((match, index) => {
-    const listing = match.listing;
-    const price = listing.priceLabel || (listing.budget ? `₹${listing.budget.toLocaleString("en-IN")}` : "price on request");
-    return `${index + 1}. *${listing.title}*\n   📍 ${listing.location || "location flexible"}  •  ${price}  •  ${match.score}% match`;
+    const l = match.listing;
+    const price = l.priceLabel || (l.budget ? `₹${l.budget.toLocaleString("en-IN")}` : "price on request");
+    let s = `${index + 1}. *${l.title}*\n   📍 ${l.location || "location flexible"}  •  ${price}  •  ${match.score}% match`;
+    if (l.contactPhone) s += `\n   📞 Contact: ${l.contactName ? l.contactName + " — " : ""}${l.contactPhone}`;
+    if (l.geo?.lat && l.geo?.lng) s += `\n   🗺️ Map: https://maps.google.com/?q=${l.geo.lat},${l.geo.lng}`;
+    return s;
   });
 
   return (

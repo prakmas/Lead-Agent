@@ -8,22 +8,29 @@ import {
   ListChecks,
   LogOut,
   Settings,
+  ShieldCheck,
+  Trash2,
   Users,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { ReactNode, useEffect, useState } from "react";
-import { clearSession, getAdmin, getToken } from "@/lib/auth";
+import { ReactNode, useEffect, useMemo, useState } from "react";
+import { authService, supervisorService } from "@/lib/api";
+import { clearSession, getAdmin, getToken, saveSession } from "@/lib/auth";
 import type { AdminUser } from "@/types/api";
-import { WhatsAppHealthBanner } from "./WhatsAppHealthBanner";
+import { FollowUpReminder } from "@/components/FollowUpReminder";
+import { NotificationBell } from "@/components/NotificationBell";
+import { WhatsAppHealthBanner } from "@/components/WhatsAppHealthBanner";
 
+// Each nav item maps to a module key — supervisors only see modules they can
+// access. The owner sees everything plus Supervisors (RBAC management).
 const navItems = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/leads", label: "Leads", icon: Users },
-  { href: "/conversations", label: "Inbox", icon: Inbox },
-  { href: "/listings", label: "Listings", icon: ListChecks },
-  { href: "/matches", label: "Matches", icon: BarChart3 },
-  { href: "/settings", label: "Settings", icon: Settings },
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, module: "dashboard" },
+  { href: "/leads", label: "Leads", icon: Users, module: "leads" },
+  { href: "/conversations", label: "Inbox", icon: Inbox, module: "inbox" },
+  { href: "/listings", label: "Listings", icon: ListChecks, module: "listings" },
+  { href: "/matches", label: "Matches", icon: BarChart3, module: "matches" },
+  { href: "/settings", label: "Settings", icon: Settings, module: "settings" },
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -38,12 +45,64 @@ export function AppShell({ children }: { children: ReactNode }) {
       return;
     }
     setAdmin(getAdmin());
+    // Re-fetch the live profile so permission/role changes (and revocation)
+    // take effect without a re-login.
+    authService
+      .me()
+      .then((res) => {
+        setAdmin(res.admin);
+        saveSession(token, res.admin);
+      })
+      .catch(() => {
+        clearSession();
+        router.replace("/login");
+      });
   }, [router]);
+
+  const isOwner = admin?.role === "owner" || admin?.role === "admin";
+  const canInbox = isOwner || (admin?.permissions?.inbox && admin.permissions.inbox !== "none");
+  const [pendingSupervisors, setPendingSupervisors] = useState(0);
+
+  // Owner: poll for pending supervisor signups to badge the Supervisors nav.
+  useEffect(() => {
+    if (!isOwner) return;
+    const check = () =>
+      supervisorService
+        .list()
+        .then((r) => setPendingSupervisors(r.pending || 0))
+        .catch(() => {});
+    check();
+    const t = setInterval(check, 30000);
+    return () => clearInterval(t);
+  }, [isOwner]);
+
+  // Visible nav = owner sees all; supervisor sees modules with view/manage.
+  const visibleNav = useMemo(
+    () =>
+      navItems.filter(
+        (item) => isOwner || (admin?.permissions?.[item.module] && admin.permissions[item.module] !== "none"),
+      ),
+    [admin, isOwner],
+  );
 
   const logout = () => {
     clearSession();
     router.replace("/login");
   };
+
+  // Owner also gets the Supervisors (RBAC) link at the end.
+  // "Deleted listings" is its own RBAC module — only show it when granted.
+  const canDeleted = isOwner || (admin?.permissions?.deleted && admin.permissions.deleted !== "none");
+  const base = visibleNav.map((n) => ({ ...n, badge: 0 }));
+  const withDeleted = (() => {
+    if (!canDeleted) return base;
+    const link = { href: "/deleted-listings", label: "Deleted listings", icon: Trash2, module: "deleted", badge: 0 };
+    const idx = base.findIndex((n) => n.href === "/listings");
+    return idx === -1 ? [...base, link] : [...base.slice(0, idx + 1), link, ...base.slice(idx + 1)];
+  })();
+  const links = isOwner
+    ? [...withDeleted, { href: "/supervisors", label: "Supervisors", icon: ShieldCheck, module: "supervisors", badge: pendingSupervisors }]
+    : withDeleted;
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-950">
@@ -58,7 +117,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </div>
         <nav className="space-y-1 p-3">
-          {navItems.map((item) => {
+          {links.map((item) => {
             const Icon = item.icon;
             const isActive = pathname === item.href;
             return (
@@ -73,6 +132,11 @@ export function AppShell({ children }: { children: ReactNode }) {
               >
                 <Icon size={18} />
                 {item.label}
+                {item.badge ? (
+                  <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold text-white">
+                    {item.badge > 9 ? "9+" : item.badge}
+                  </span>
+                ) : null}
               </Link>
             );
           })}
@@ -86,6 +150,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <p className="text-xs text-slate-500">WhatsApp, Instagram, Facebook unified workflow</p>
           </div>
           <div className="flex items-center gap-3">
+            {canInbox ? <NotificationBell /> : null}
             <div className="hidden text-right sm:block">
               <p className="text-sm font-medium">{admin?.name || "Admin"}</p>
               <p className="text-xs text-slate-500">{admin?.email}</p>
@@ -102,15 +167,15 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </header>
 
-        <nav className="grid grid-cols-6 border-b border-slate-200 bg-white lg:hidden">
-          {navItems.map((item) => {
+        <nav className="flex justify-around border-b border-slate-200 bg-white lg:hidden">
+          {links.map((item) => {
             const Icon = item.icon;
             const isActive = pathname === item.href;
             return (
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex h-12 items-center justify-center ${isActive ? "text-teal-700" : "text-slate-500"}`}
+                className={`flex h-12 flex-1 items-center justify-center ${isActive ? "text-teal-700" : "text-slate-500"}`}
                 title={item.label}
               >
                 <Icon size={18} />
@@ -123,6 +188,9 @@ export function AppShell({ children }: { children: ReactNode }) {
 
         <main className="px-4 py-6 sm:px-6">{children}</main>
       </div>
+
+      {/* App-wide follow-up reminder popup */}
+      <FollowUpReminder />
     </div>
   );
 }

@@ -2,7 +2,7 @@
 
 import { Loader2, MapPin, Search } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { api } from "@/lib/api";
+import { locationService } from "@/lib/api";
 
 export type LocationValue = {
   location: string; // display string e.g. "Koramangala, Bangalore"
@@ -56,13 +56,9 @@ export function LocationPicker({
       setLoading(true);
       try {
         const [cities, areas] = await Promise.all([
-          api<{ data: Array<{ label: string; type: string; country?: string; state?: string; city?: string; name: string }> }>(
-            `/locations/search?q=${encodeURIComponent(q)}&limit=6`,
-          ).catch(() => ({ data: [] })),
+          locationService.search(q, 6).catch(() => ({ data: [] })),
           q.trim().length >= 3
-            ? api<{ data: Array<{ label: string; area: string; district: string; state: string; country: string; pincode: string }> }>(
-                `/locations/area/${encodeURIComponent(q.trim())}`,
-              ).catch(() => ({ data: [] }))
+            ? locationService.area(q.trim()).catch(() => ({ data: [] }))
             : Promise.resolve({ data: [] }),
         ]);
 
@@ -108,9 +104,7 @@ export function LocationPicker({
     if (!/^\d{6}$/.test(p)) return;
     setPinLoading(true);
     try {
-      const res = await api<{ data: Array<{ area: string; district: string; state: string; country: string }> }>(
-        `/locations/pincode/${p}`,
-      );
+      const res = await locationService.pincode(p);
       const o = res.data?.[0];
       if (o) {
         const label = `${o.area}, ${o.district}, ${o.state}`;

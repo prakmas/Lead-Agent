@@ -19,6 +19,12 @@ const env = {
     phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID || "",
     accessToken: process.env.WHATSAPP_ACCESS_TOKEN || "",
   },
+  twilio: {
+    accountSid: process.env.TWILIO_ACCOUNT_SID || "",
+    authToken: process.env.TWILIO_AUTH_TOKEN || "",
+    // Twilio Verify service (VA...) — Twilio generates & sends the OTP.
+    verifyServiceSid: process.env.TWILIO_VERIFY_SERVICE_SID || "",
+  },
   instagram: {
     pageId: process.env.INSTAGRAM_PAGE_ID || "",
     accessToken: process.env.INSTAGRAM_ACCESS_TOKEN || "",

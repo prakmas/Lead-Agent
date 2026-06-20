@@ -8,11 +8,33 @@ export type LeadStatus =
   | "Closed"
   | "Spam";
 
+export type ModuleAccess = "none" | "view" | "manage";
+
 export type AdminUser = {
   id: string;
   name: string;
   email: string;
   role: string;
+  permissions?: Record<string, ModuleAccess>;
+};
+
+export type Territory = { level: "state" | "city" | "pincode"; value: string };
+
+export type Supervisor = {
+  _id: string;
+  name: string;
+  email?: string;
+  phone?: string;
+  location?: string;
+  pincode?: string;
+  role: string;
+  permissions: Record<string, ModuleAccess>;
+  territories?: Territory[];
+  isActive: boolean;
+  approvalStatus?: "pending" | "approved" | "rejected";
+  viewPassword?: string;
+  lastLoginAt?: string;
+  createdAt?: string;
 };
 
 export type Channel = {
@@ -52,6 +74,13 @@ export type Lead = {
     keywords?: string[];
     rawText?: string;
   };
+  followUp?: {
+    active?: boolean;
+    tag?: string;
+    note?: string;
+    createdAt?: string;
+    completedAt?: string;
+  };
   createdAt: string;
 };
 
@@ -89,6 +118,25 @@ export type Listing = {
   availability?: string;
   preferences?: string[];
   keywords?: string[];
+  images?: string[];
+  coverThumb?: string;
+  geo?: { lat?: number; lng?: number; address?: string };
+  contactName?: string;
+  contactPhone?: string;
+  // Business registration details
+  ownerName?: string;
+  ownerPhone?: string;
+  phoneVerified?: boolean;
+  mapLink?: string;
+  address?: string;
+  landmark?: string;
+  timings?: string;
+  services?: string;
+  metadata?: { country?: string; state?: string; city?: string; area?: string; pincode?: string };
+  createdBy?: { _id: string; name?: string; email?: string; role?: string } | string | null;
+  deletedAt?: string;
+  deletedBy?: { _id: string; name?: string; email?: string; role?: string } | string | null;
+  deleteReason?: string;
   status: string;
   createdAt: string;
 };
@@ -119,4 +167,30 @@ export type Paginated<T> = {
   page: number;
   limit: number;
   pages: number;
+};
+
+// ── Location lookup responses ──
+export type LocationSuggestion = {
+  name: string;
+  label: string;
+  type: string;
+  state?: string;
+  city?: string;
+  country?: string;
+};
+
+export type AreaResult = {
+  label: string;
+  area: string;
+  district: string;
+  state: string;
+  country: string;
+  pincode: string;
+};
+
+export type PincodeResult = {
+  area: string;
+  district: string;
+  state: string;
+  country: string;
 };

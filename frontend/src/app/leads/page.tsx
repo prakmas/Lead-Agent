@@ -4,10 +4,12 @@ import { RefreshCw } from "lucide-react";
 import { ChangeEvent, useCallback, useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { ChannelBadge } from "@/components/ChannelBadge";
+import { FollowUpControl } from "@/components/FollowUpControl";
+import { PageLoader } from "@/components/Loader";
 import { PageHeader } from "@/components/PageHeader";
 import { StatusBadge } from "@/components/StatusBadge";
-import { api } from "@/lib/api";
-import type { Lead, LeadStatus, Paginated } from "@/types/api";
+import { leadService } from "@/lib/api";
+import type { Lead, LeadStatus } from "@/types/api";
 
 const statuses: LeadStatus[] = ["New", "Contacted", "Qualified", "Matched", "Closed", "Spam"];
 
@@ -15,25 +17,33 @@ export default function LeadsPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
+  const [followUp, setFollowUp] = useState(""); // "" | "active"
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
 
   const loadLeads = useCallback(async () => {
-    const params = new URLSearchParams();
-    if (search) params.set("search", search);
-    if (status) params.set("status", status);
-    const result = await api<Paginated<Lead>>(`/admin/leads?${params.toString()}`);
-    setLeads(result.data);
-  }, [search, status]);
+    setLoading(true);
+    try {
+      const result = await leadService.list({ search, status, followUp: followUp || undefined });
+      setLeads(result.data);
+    } finally {
+      setLoading(false);
+    }
+  }, [search, status, followUp]);
 
   useEffect(() => {
     let isMounted = true;
 
-    api<Paginated<Lead>>("/admin/leads")
+    leadService
+      .list()
       .then((result) => {
         if (isMounted) setLeads(result.data);
       })
       .catch((err) => {
         if (isMounted) setError(err.message);
+      })
+      .finally(() => {
+        if (isMounted) setLoading(false);
       });
 
     return () => {
@@ -42,10 +52,7 @@ export default function LeadsPage() {
   }, []);
 
   const changeStatus = async (leadId: string, nextStatus: string) => {
-    const updated = await api<Lead>(`/admin/leads/${leadId}`, {
-      method: "PATCH",
-      body: JSON.stringify({ status: nextStatus }),
-    });
+    const updated = await leadService.update(leadId, { status: nextStatus });
     setLeads((items) => items.map((item) => (item._id === leadId ? updated : item)));
   };
 
@@ -88,6 +95,20 @@ export default function LeadsPage() {
             </option>
           ))}
         </select>
+        <select
+          value={followUp}
+          onChange={(event) => {
+            setFollowUp(event.target.value);
+            leadService
+              .list({ search, status, followUp: event.target.value || undefined })
+              .then((r) => setLeads(r.data))
+              .catch((err) => setError(err.message));
+          }}
+          className="h-10 rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-teal-600"
+        >
+          <option value="">All leads</option>
+          <option value="active">Needs follow-up</option>
+        </select>
         <button
           type="button"
           onClick={() => loadLeads().catch((err) => setError(err.message))}
@@ -99,6 +120,11 @@ export default function LeadsPage() {
 
       {error ? <div className="mb-4 rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</div> : null}
 
+      {loading ? (
+        <div className="rounded-lg border border-slate-200 bg-white shadow-sm">
+          <PageLoader label="Loading leads…" />
+        </div>
+      ) : (
       <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-slate-200 text-sm">
@@ -108,6 +134,7 @@ export default function LeadsPage() {
                 <th className="px-4 py-3">Channel</th>
                 <th className="px-4 py-3">Location</th>
                 <th className="px-4 py-3">Budget</th>
+                <th className="px-4 py-3">Follow-up</th>
                 <th className="px-4 py-3">Status</th>
               </tr>
             </thead>
@@ -124,6 +151,9 @@ export default function LeadsPage() {
                   <td className="px-4 py-3 text-slate-600">{lead.requirements?.location || "-"}</td>
                   <td className="px-4 py-3 text-slate-600">
                     {lead.requirements?.budgetMax ? `₹${lead.requirements.budgetMax}` : "-"}
+                  </td>
+                  <td className="px-4 py-3">
+                    <FollowUpControl lead={lead} onChange={() => loadLeads().catch((err) => setError(err.message))} />
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
@@ -149,6 +179,7 @@ export default function LeadsPage() {
           </table>
         </div>
       </div>
+      )}
     </AppShell>
   );
 }

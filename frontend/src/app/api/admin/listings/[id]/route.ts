@@ -1,25 +1,81 @@
 import Listing from "@/server/models/Listing.js";
-import { requireAuth } from "@/server/auth.js";
+import DeletedListing from "@/server/models/DeletedListing.js";
+import { requireApiAccess } from "@/server/auth.js";
 import { route, json } from "@/server/http.js";
+import { listingInTerritory } from "@/server/utils/territory.js";
 import createHttpError from "@/server/utils/createHttpError.js";
 
 export const dynamic = "force-dynamic";
 
 type Ctx = { params: Promise<{ id: string }> };
 
-export const PATCH = route(async (request: Request, ctx: Ctx) => {
-  await requireAuth(request);
+type Admin = { _id: { toString(): string }; role: string; territories?: unknown };
+type WithCreator = { createdBy?: { toString(): string } | null; metadata?: unknown };
+
+const isOwner = (admin: Admin) => admin.role === "owner" || admin.role === "admin";
+
+// View is allowed within the supervisor's territory (owner sees all).
+const ensureCanView = (admin: Admin, listing: WithCreator) => {
+  if (!listingInTerritory(admin, listing)) {
+    throw createHttpError(403, "This listing is outside your territory");
+  }
+};
+
+// Editing/deleting is restricted to the listing's creator (owner can do all).
+const ensureCanManage = (admin: Admin, listing: WithCreator) => {
+  if (isOwner(admin)) return;
+  const mine = listing.createdBy && listing.createdBy.toString() === admin._id.toString();
+  if (!mine) throw createHttpError(403, "You can only edit listings you created");
+};
+
+// Full detail incl. images — used when opening a listing to edit/view.
+export const GET = route(async (request: Request, ctx: Ctx) => {
+  const admin = (await requireApiAccess(request)) as Admin;
   const { id } = await ctx.params;
-  const body = await request.json();
-  const listing = await Listing.findByIdAndUpdate(id, body, { new: true, runValidators: true });
+  const listing = await Listing.findById(id).populate({ path: "createdBy", select: "name email role" });
   if (!listing) throw createHttpError(404, "Listing not found");
+  ensureCanView(admin, listing as WithCreator);
   return json(listing);
 });
 
-export const DELETE = route(async (request: Request, ctx: Ctx) => {
-  await requireAuth(request);
+export const PATCH = route(async (request: Request, ctx: Ctx) => {
+  const admin = (await requireApiAccess(request)) as Admin;
   const { id } = await ctx.params;
-  const listing = await Listing.findByIdAndDelete(id);
-  if (!listing) throw createHttpError(404, "Listing not found");
-  return json({ message: "Listing deleted" });
+  const existing = await Listing.findById(id);
+  if (!existing) throw createHttpError(404, "Listing not found");
+  ensureCanManage(admin, existing as WithCreator);
+
+  const body = await request.json();
+  // createdBy is immutable — never let an update reassign ownership.
+  delete body.createdBy;
+  const listing = await Listing.findByIdAndUpdate(id, body, { new: true, runValidators: true });
+  return json(listing);
+});
+
+// Delete = MOVE the listing into the deletedListings collection (with reason),
+// then remove it from the active listings collection.
+export const DELETE = route(async (request: Request, ctx: Ctx) => {
+  const admin = (await requireApiAccess(request)) as Admin;
+  const { id } = await ctx.params;
+  const existing = (await Listing.findById(id)) as
+    | (WithCreator & { _id: unknown; toObject: () => Record<string, unknown> })
+    | null;
+  if (!existing) throw createHttpError(404, "Listing not found");
+  ensureCanManage(admin, existing);
+
+  const body = (await request.json().catch(() => ({}))) as { reason?: string };
+  const snapshot = existing.toObject();
+  delete snapshot._id;
+  delete snapshot.__v;
+
+  await DeletedListing.create({
+    ...snapshot,
+    originalId: existing._id,
+    deletedAt: new Date(),
+    deletedBy: admin._id,
+    deleteReason: (body.reason || "").trim(),
+  });
+  await Listing.findByIdAndDelete(id);
+
+  return json({ message: "Listing deleted", id });
 });

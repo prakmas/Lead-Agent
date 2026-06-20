@@ -5,6 +5,7 @@ import {
   Bot,
   CheckCheck,
   Info,
+  MailQuestion,
   MapPin,
   Phone,
   RefreshCw,
@@ -19,8 +20,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { ChannelBadge } from "@/components/ChannelBadge";
 import { PageHeader } from "@/components/PageHeader";
-import { api } from "@/lib/api";
-import type { Conversation, Match, Message, Paginated } from "@/types/api";
+import { TagPicker } from "@/components/TagPicker";
+import { Spinner } from "@/components/Loader";
+import { contactService, conversationService, matchService } from "@/lib/api";
+import type { Conversation, Match, Message } from "@/types/api";
 
 const STATUS_OPTIONS = ["open", "waiting", "matched", "closed", "stopped", "spam"];
 
@@ -70,6 +73,7 @@ export default function ConversationsPage() {
   const [statusFilter, setStatusFilter] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [loadingList, setLoadingList] = useState(true);
 
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
@@ -78,7 +82,7 @@ export default function ConversationsPage() {
   const [editName, setEditName] = useState("");
   const [editPhone, setEditPhone] = useState("");
   const [editNotes, setEditNotes] = useState("");
-  const [editTags, setEditTags] = useState("");
+  const [editTags, setEditTags] = useState<string[]>([]);
   const [savingContact, setSavingContact] = useState(false);
 
   const threadEndRef = useRef<HTMLDivElement>(null);
@@ -90,17 +94,22 @@ export default function ConversationsPage() {
   const botEnabled = selected?.metadata?.botEnabled !== false;
 
   const loadConversations = useCallback(async () => {
-    const params = new URLSearchParams();
-    if (statusFilter) params.set("status", statusFilter);
-    params.set("limit", "100");
-    const result = await api<Paginated<Conversation>>(`/admin/conversations?${params.toString()}`);
+    const result = await conversationService.list({ status: statusFilter || undefined, limit: 100 });
     setConversations(result.data);
     setSelectedId((prev) => prev || result.data[0]?._id || null);
   }, [statusFilter]);
 
   useEffect(() => {
-    loadConversations().catch((err) => setError(err.message));
+    loadConversations()
+      .catch((err) => setError(err.message))
+      .finally(() => setLoadingList(false));
   }, [loadConversations]);
+
+  // Open a specific conversation when arriving from a notification (?c=<id>).
+  useEffect(() => {
+    const c = new URLSearchParams(window.location.search).get("c");
+    if (c) setSelectedId(c);
+  }, []);
 
   // Poll the list periodically so new inbound messages surface without a refresh.
   useEffect(() => {
@@ -114,11 +123,11 @@ export default function ConversationsPage() {
       setMatches([]);
       return;
     }
-    const msgs = await api<{ data: Message[] }>(`/admin/conversations/${conversation._id}/messages`);
+    const msgs = await conversationService.messages(conversation._id);
     setMessages(msgs.data);
     const leadId = conversation.lead?._id;
     if (leadId) {
-      const m = await api<Paginated<Match>>(`/admin/matches?leadId=${leadId}&limit=10`);
+      const m = await matchService.list({ leadId, limit: 10 });
       setMatches(m.data);
     } else {
       setMatches([]);
@@ -132,13 +141,14 @@ export default function ConversationsPage() {
     setEditName(selected.contact?.name || "");
     setEditPhone(selected.contact?.phone || "");
     setEditNotes(selected.contact?.profile?.notes || "");
-    setEditTags((selected.contact?.tags || []).join(", "));
-    // Clear unread on open.
+    setEditTags(selected.contact?.tags || []);
+    // Clear unread on open — optimistically update the list, persist, and tell
+    // the header bell to refresh immediately (instead of waiting for its poll).
     if (selected.unreadCount > 0) {
-      api(`/admin/conversations/${selected._id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ markRead: true }),
-      }).catch(() => {});
+      const id = selected._id;
+      setConversations((prev) => prev.map((c) => (c._id === id ? { ...c, unreadCount: 0 } : c)));
+      conversationService.markRead(id).catch(() => {});
+      if (typeof window !== "undefined") window.dispatchEvent(new Event("crr:conversations-changed"));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
@@ -147,7 +157,8 @@ export default function ConversationsPage() {
   useEffect(() => {
     if (!selectedId) return;
     const t = setInterval(() => {
-      api<{ data: Message[] }>(`/admin/conversations/${selectedId}/messages`)
+      conversationService
+        .messages(selectedId)
         .then((r) => setMessages(r.data))
         .catch(() => {});
     }, 8000);
@@ -169,10 +180,7 @@ export default function ConversationsPage() {
     setSending(true);
     setError("");
     try {
-      const res = await api<{ data: Message; sendResult?: { ok?: boolean; error?: string } }>(
-        `/admin/conversations/${selected._id}/reply`,
-        { method: "POST", body: JSON.stringify({ text }) },
-      );
+      const res = await conversationService.reply(selected._id, text);
       setMessages((prev) => [...prev, res.data]);
       setDraft("");
       if (res.sendResult?.ok === false) {
@@ -189,10 +197,7 @@ export default function ConversationsPage() {
   const toggleBot = async () => {
     if (!selected) return;
     try {
-      const res = await api<{ data: Conversation }>(`/admin/conversations/${selected._id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ botEnabled: !botEnabled }),
-      });
+      const res = await conversationService.setBot(selected._id, !botEnabled);
       setConversations((prev) => prev.map((c) => (c._id === selected._id ? res.data : c)));
       flash(res.data.metadata?.botEnabled === false ? "Auto-reply bot turned OFF" : "Auto-reply bot turned ON");
     } catch (err) {
@@ -203,28 +208,31 @@ export default function ConversationsPage() {
   const changeStatus = async (status: string) => {
     if (!selected) return;
     try {
-      const res = await api<{ data: Conversation }>(`/admin/conversations/${selected._id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ status }),
-      });
+      const res = await conversationService.setStatus(selected._id, status);
       setConversations((prev) => prev.map((c) => (c._id === selected._id ? res.data : c)));
     } catch (err) {
       setError((err as Error).message);
     }
   };
 
+  const markUnread = async () => {
+    if (!selected) return;
+    const id = selected._id;
+    setConversations((prev) => prev.map((c) => (c._id === id ? { ...c, unreadCount: Math.max(1, c.unreadCount || 0) } : c)));
+    conversationService.markUnread(id).catch(() => {});
+    if (typeof window !== "undefined") window.dispatchEvent(new Event("crr:conversations-changed"));
+    flash("Marked as unread");
+  };
+
   const saveContact = async () => {
     if (!selected?.contact?._id) return;
     setSavingContact(true);
     try {
-      const res = await api<{ data: Conversation["contact"] }>(`/admin/contacts/${selected.contact._id}`, {
-        method: "PATCH",
-        body: JSON.stringify({
-          name: editName,
-          phone: editPhone,
-          notes: editNotes,
-          tags: editTags.split(",").map((t) => t.trim()).filter(Boolean),
-        }),
+      const res = await contactService.update(selected.contact._id, {
+        name: editName,
+        phone: editPhone,
+        notes: editNotes,
+        tags: editTags,
       });
       setConversations((prev) =>
         prev.map((c) => (c._id === selected._id ? { ...c, contact: { ...c.contact, ...res.data } } : c)),
@@ -277,9 +285,9 @@ export default function ConversationsPage() {
         </div>
       ) : null}
 
-      <div className="grid min-h-[720px] grid-cols-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm lg:grid-cols-[300px_minmax(0,1fr)] xl:grid-cols-[300px_minmax(0,1fr)_340px]">
+      <div className="grid grid-cols-1 rounded-xl border border-slate-200 bg-white shadow-sm lg:h-[calc(100dvh-11rem)] lg:grid-cols-[300px_minmax(0,1fr)] lg:overflow-hidden xl:grid-cols-[300px_minmax(0,1fr)_340px]">
         {/* ── Conversation list ─────────────────────────────────────────── */}
-        <aside className="flex flex-col border-r border-slate-200">
+        <aside className="flex min-h-0 flex-col border-b border-slate-200 lg:border-b-0 lg:border-r">
           <div className="space-y-2 border-b border-slate-200 p-3">
             <div className="flex h-10 items-center gap-2 rounded-md border border-slate-200 px-3">
               <Search size={16} className="text-slate-400" />
@@ -304,8 +312,10 @@ export default function ConversationsPage() {
             </select>
           </div>
 
-          <div className="max-h-[640px] flex-1 divide-y divide-slate-100 overflow-y-auto">
-            {filtered.length === 0 ? (
+          <div className="max-h-[55vh] min-h-0 flex-1 divide-y divide-slate-100 overflow-y-auto lg:max-h-none">
+            {loadingList ? (
+              <div className="flex justify-center py-10"><Spinner size={22} className="text-teal-600" /></div>
+            ) : filtered.length === 0 ? (
               <p className="p-6 text-center text-sm text-slate-400">No conversations</p>
             ) : null}
             {filtered.map((c) => {
@@ -358,7 +368,7 @@ export default function ConversationsPage() {
         </aside>
 
         {/* ── Chat thread ───────────────────────────────────────────────── */}
-        <section className="flex min-h-[400px] flex-col">
+        <section className="flex h-[70vh] min-h-0 flex-col border-b border-slate-200 lg:h-auto lg:border-b-0">
           {!selected ? (
             <div className="flex flex-1 items-center justify-center text-sm text-slate-400">
               Select a conversation
@@ -381,6 +391,14 @@ export default function ConversationsPage() {
                 </div>
 
                 <div className="ml-auto flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={markUnread}
+                    title="Mark this chat as unread"
+                    className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 px-2.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                  >
+                    <MailQuestion size={14} /> Unread
+                  </button>
                   <select
                     value={selected.status}
                     onChange={(e) => changeStatus(e.target.value).catch(() => {})}
@@ -414,7 +432,7 @@ export default function ConversationsPage() {
                 </div>
               ) : null}
 
-              <div className="flex-1 space-y-2.5 overflow-y-auto bg-slate-50 p-5">
+              <div className="min-h-0 flex-1 space-y-2.5 overflow-y-auto bg-slate-50 p-5">
                 {messages.length === 0 ? (
                   <p className="text-center text-sm text-slate-400">No messages yet</p>
                 ) : null}
@@ -433,7 +451,9 @@ export default function ConversationsPage() {
                     >
                       <p className="whitespace-pre-line">{m.text || "[non-text message]"}</p>
                       <div className={`mt-1.5 flex items-center gap-1.5 text-[10px] ${out ? "text-teal-100" : "text-slate-400"}`}>
-                        <span>{new Date(m.createdAt).toLocaleString()}</span>
+                        <span title={new Date(m.createdAt).toLocaleString()}>
+                          {new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                        </span>
                         {out ? (
                           <>
                             <span>·</span>
@@ -484,7 +504,7 @@ export default function ConversationsPage() {
         </section>
 
         {/* ── Customer details ──────────────────────────────────────────── */}
-        <aside className="hidden flex-col gap-4 overflow-y-auto border-l border-slate-200 bg-slate-50/50 p-4 xl:flex">
+        <aside className="hidden min-h-0 flex-col gap-4 overflow-y-auto border-l border-slate-200 bg-slate-50/50 p-4 xl:flex">
           {!selected ? (
             <p className="text-sm text-slate-400">No customer selected</p>
           ) : (
@@ -509,14 +529,9 @@ export default function ConversationsPage() {
                     placeholder="Phone number"
                   />
                   <label className="block text-[11px] font-medium text-slate-500">
-                    <Tag size={11} className="mr-1 inline" /> Tags (comma separated)
+                    <Tag size={11} className="mr-1 inline" /> Tags
                   </label>
-                  <input
-                    value={editTags}
-                    onChange={(e) => setEditTags(e.target.value)}
-                    className="h-9 w-full rounded-md border border-slate-200 px-2.5 text-sm outline-none focus:border-teal-600"
-                    placeholder="vip, hot lead"
-                  />
+                  <TagPicker value={editTags} onChange={setEditTags} />
                   <label className="block text-[11px] font-medium text-slate-500">Notes</label>
                   <textarea
                     value={editNotes}

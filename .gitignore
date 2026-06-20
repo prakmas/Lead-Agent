@@ -9,3 +9,6 @@ backend/.env
 frontend/node_modules
 frontend/.env.local
 frontend/.next
+
+# Separate standalone repo (lead-agent-mobile) — managed independently
+lead-agent-mobile/

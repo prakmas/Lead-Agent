@@ -3,7 +3,7 @@ import Contact from "@/server/models/Contact.js";
 import Conversation from "@/server/models/Conversation.js";
 import Message from "@/server/models/Message.js";
 import { sendMessage } from "@/server/services/messaging.service.js";
-import { requireAuth } from "@/server/auth.js";
+import { requireApiAccess } from "@/server/auth.js";
 import { route, json } from "@/server/http.js";
 
 export const dynamic = "force-dynamic";
@@ -13,7 +13,7 @@ type Ctx = { params: Promise<{ id: string }> };
 // Manual reply from the admin Inbox. Sends the message to the customer on their
 // channel and records it as an outbound message — independent of the bot.
 export const POST = route(async (request: Request, ctx: Ctx) => {
-  await requireAuth(request);
+  await requireApiAccess(request);
   const { id } = await ctx.params;
   const body = await request.json().catch(() => ({}));
   const text = (body.text || "").toString().trim();
