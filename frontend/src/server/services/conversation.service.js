@@ -7,6 +7,7 @@ import Match from "../models/Match.js";
 import Message from "../models/Message.js";
 import { analyzeRequirement, buildAck, buildFollowUpQuestion, buildMatchReply, buildWelcomeMenu } from "./aiAgent.service.js";
 import { markMatchesSent, scheduleFollowUp } from "./followUp.service.js";
+import { handleListingFlow, isListingIntent } from "./listingFlow.service.js";
 import { findMatchesForLead } from "./matching.service.js";
 import { sendMessage } from "./messaging.service.js";
 import {
@@ -227,6 +228,18 @@ export const processInboundMessage = async (commonMessage) => {
     const sendResult = await sendMessage({ channel: commonMessage.channel, to: commonMessage.contactId, text: reply });
     await saveOutboundMessage(reply, channel, contact, conversation, sendResult);
     return { conversation, lead: conversation.lead || null, reply, matches: [], intent: convIntent };
+  }
+
+  // ── Business listing flow — the user wants to LIST their own service ─────────
+  // Either they're mid-listing (flowStage) or this message expresses list intent.
+  if (conversation.metadata?.flowStage === "listing" || isListingIntent(commonMessage.message)) {
+    const reply = await handleListingFlow({ message: commonMessage.message, conversation, contact });
+    conversation.lastMessage = reply;
+    conversation.lastMessageAt = new Date();
+    await conversation.save();
+    const sendResult = await sendMessage({ channel: commonMessage.channel, to: commonMessage.contactId, text: reply });
+    await saveOutboundMessage(reply, channel, contact, conversation, sendResult);
+    return { conversation, lead: conversation.lead || null, reply, matches: [], intent: "listing" };
   }
 
   // Customer picked an option ("1", "2"…) after seeing matches — treat it as

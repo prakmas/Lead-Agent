@@ -14,7 +14,8 @@ export const buildWelcomeMenu = () => {
     "Hi! 👋 Welcome — happy to help you find what you need.\n\n" +
     "What are you looking for today?\n\n" +
     `${items}\n\n` +
-    'Just reply with a number (e.g. "1"), or tell me directly — like "2BHK flat in Koramangala under 25000". 😊'
+    'Just reply with a number (e.g. "1"), or tell me directly — like "2BHK flat in Koramangala under 25000". 😊\n\n' +
+    '🏪 Run a business? Type *"list my business"* to get listed so customers can find you.'
   );
 };
 
