@@ -109,7 +109,9 @@ export const handleListingFlow = async ({ message, conversation, contact }) => {
     return QUESTION.name;
   }
 
-  const d = w.data || {};
+  // IMPORTANT: keep `d` pointing at w.data so collected fields persist across messages.
+  w.data ||= {};
+  const d = w.data;
   const advance = (nextStep) => {
     w.step = nextStep;
     conversation.metadata = { ...conversation.metadata, wizard: w, flowStage: "listing" };
