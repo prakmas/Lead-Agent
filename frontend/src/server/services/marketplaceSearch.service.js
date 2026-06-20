@@ -28,13 +28,13 @@ const rx = (s) => new RegExp(String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "
 
 // Handles "I'm looking for X" across all categories. Collects item + location,
 // queries active listings, records a lead, and returns matches.
-export const handleMarketplaceSearch = async ({ message, conversation, contact }) => {
+export const handleMarketplaceSearch = async ({ message, conversation, contact, preExtracted }) => {
   const text = (message || "").trim();
   const state = conversation.metadata?.search || { data: {} };
   state.data ||= {};
   const d = state.data;
 
-  const ex = await extractMarketplace(text);
+  const ex = preExtracted || (await extractMarketplace(text));
   for (const f of ["category", "item", "location", "city", "price"]) if (ex[f] && !d[f]) d[f] = ex[f];
 
   // Direct assignment when answering the exact question we asked.

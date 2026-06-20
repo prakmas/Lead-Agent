@@ -98,7 +98,7 @@ const summary = (l, d) =>
 
 // CREATE-listing agent: extracts structure from each message, asks only for the
 // missing required fields (mobile mandatory), then saves a clean listing. No OTP.
-export const handleListingFlow = async ({ message, conversation, contact }) => {
+export const handleListingFlow = async ({ message, conversation, contact, preExtracted }) => {
   const text = (message || "").trim();
 
   if (/\b(cancel|stop|exit|quit)\b/i.test(text) && conversation.metadata?.market) {
@@ -113,7 +113,7 @@ export const handleListingFlow = async ({ message, conversation, contact }) => {
 
   // Re-extract from the latest message, but only FILL EMPTY fields — never
   // overwrite already-collected data with a noisy single-word re-extraction.
-  const ex = await extractMarketplace(text);
+  const ex = preExtracted || (await extractMarketplace(text));
   for (const f of ["category", "listing_type", "item", "title", "location", "city", "price", "description"]) {
     if (ex[f] && !d[f]) d[f] = ex[f];
   }

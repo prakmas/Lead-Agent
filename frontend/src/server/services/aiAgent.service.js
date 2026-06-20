@@ -9,13 +9,13 @@ const NUMBER_EMOJI = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6�
 
 // Friendly welcome + a numbered menu of services the customer can pick from.
 export const buildWelcomeMenu = () => {
-  const items = SERVICE_MENU.map((s, i) => `${NUMBER_EMOJI[i] || i + 1}  ${s.label}`).join("\n");
   return (
-    "Hi! 👋 Welcome — happy to help you find what you need.\n\n" +
-    "What are you looking for today?\n\n" +
-    `${items}\n\n` +
-    'Just reply with a number (e.g. "1"), or tell me directly — like "2BHK flat in Koramangala under 25000". 😊\n\n' +
-    '🏪 Run a business? Type *"list my business"* to get listed so customers can find you.'
+    "Hi! 👋 Welcome. I can help you two ways:\n\n" +
+    "🛒 *List* something to sell or rent — just tell me, e.g.\n" +
+    '   "sell my car for 4 lakhs" · "rent my flat for 12000"\n\n' +
+    "🔎 *Find* something you need — e.g.\n" +
+    '   "looking for a car in Hyderabad" · "need a plumber in Kukatpally"\n\n' +
+    "What would you like to do? 🙂"
   );
 };
 

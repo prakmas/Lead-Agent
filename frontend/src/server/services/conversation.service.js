@@ -7,8 +7,9 @@ import Match from "../models/Match.js";
 import Message from "../models/Message.js";
 import { analyzeRequirement, buildAck, buildFollowUpQuestion, buildMatchReply, buildWelcomeMenu } from "./aiAgent.service.js";
 import { markMatchesSent, scheduleFollowUp } from "./followUp.service.js";
-import { handleListingFlow, isListingIntent } from "./listingFlow.service.js";
-import { handleMarketplaceSearch, isSearchIntent } from "./marketplaceSearch.service.js";
+import { handleListingFlow } from "./listingFlow.service.js";
+import { extractMarketplace } from "./listingExtractor.service.js";
+import { handleMarketplaceSearch } from "./marketplaceSearch.service.js";
 import { findMatchesForLead } from "./matching.service.js";
 import { sendMessage } from "./messaging.service.js";
 import {
@@ -218,7 +219,7 @@ export const processInboundMessage = async (commonMessage) => {
     let reply;
     if (convIntent === "greeting") {
       reply = buildWelcomeMenu();
-      conversation.metadata = { ...conversation.metadata, flowStage: "menu" };
+      conversation.metadata = { ...conversation.metadata, flowStage: null };
       conversation.markModified("metadata");
     } else {
       reply = "You're welcome! 😊 Whenever you need a place, a roommate, or a service, just message me here. Have a great day!";
@@ -231,29 +232,34 @@ export const processInboundMessage = async (commonMessage) => {
     return { conversation, lead: conversation.lead || null, reply, matches: [], intent: convIntent };
   }
 
-  // ── Business listing flow — the user wants to LIST their own service ─────────
-  // Either they're mid-listing (flowStage) or this message expresses list intent.
-  if (conversation.metadata?.flowStage === "listing" || isListingIntent(commonMessage.message)) {
-    const reply = await handleListingFlow({ message: commonMessage.message, conversation, contact });
+  // ── Marketplace agent (AI-driven) — handles BOTH listing and searching ──────
+  // Mid-flow continues the active flow; otherwise the AI classifies the intent
+  // (list vs find vs unclear) so any phrasing works ("buy"/"purchase"/"need"…).
+  {
+    const stage = conversation.metadata?.flowStage;
+    let route = stage === "listing" ? "create" : stage === "search" ? "search" : null;
+    let preEx = null;
+    if (!route) {
+      preEx = await extractMarketplace(commonMessage.message);
+      route = preEx.intent === "CREATE_LISTING" ? "create" : preEx.intent === "SEARCH_LISTING" ? "search" : "unknown";
+    }
+
+    let reply;
+    if (route === "create") reply = await handleListingFlow({ message: commonMessage.message, conversation, contact, preExtracted: preEx });
+    else if (route === "search") reply = await handleMarketplaceSearch({ message: commonMessage.message, conversation, contact, preExtracted: preEx });
+    else
+      reply =
+        "I can help two ways 👇\n\n🛒 *List* something to sell or rent — e.g. \"sell my car\" or \"rent my flat\"\n🔎 *Find* something you need — e.g. \"looking for a car\" or \"need a plumber\"\n\nWhat would you like to do?";
+
     conversation.lastMessage = reply;
     conversation.lastMessageAt = new Date();
     await conversation.save();
     const sendResult = await sendMessage({ channel: commonMessage.channel, to: commonMessage.contactId, text: reply });
     await saveOutboundMessage(reply, channel, contact, conversation, sendResult);
-    return { conversation, lead: conversation.lead || null, reply, matches: [], intent: "listing" };
+    return { conversation, lead: conversation.lead || null, reply, matches: [], intent: route };
   }
 
-  // ── Marketplace search flow — the user is LOOKING for something ──────────────
-  if (conversation.metadata?.flowStage === "search" || isSearchIntent(commonMessage.message)) {
-    const reply = await handleMarketplaceSearch({ message: commonMessage.message, conversation, contact });
-    conversation.lastMessage = reply;
-    conversation.lastMessageAt = new Date();
-    await conversation.save();
-    const sendResult = await sendMessage({ channel: commonMessage.channel, to: commonMessage.contactId, text: reply });
-    await saveOutboundMessage(reply, channel, contact, conversation, sendResult);
-    return { conversation, lead: conversation.lead || null, reply, matches: [], intent: "search" };
-  }
-
+  // (legacy real-estate pipeline below is no longer reached for the marketplace MVP)
   // Customer picked an option ("1", "2"…) after seeing matches — treat it as
   // interest and offer to connect them, instead of re-running the search.
   if (conversation.status === "matched" && /^[1-9]$/.test(commonMessage.message.trim())) {

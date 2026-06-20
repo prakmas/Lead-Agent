@@ -184,9 +184,10 @@ const MARKET_PROMPT = `You are an assistant for a local marketplace. Read the us
  "description": "one short clean sentence, else empty"
 }
 Rules:
-- intent = CREATE_LISTING for: sell, list, post, "add my", "my service", "rent out", "for sale", "for rent", "i am a <job>", "i provide/offer".
-- intent = SEARCH_LISTING for: need, "looking for", "want to buy", required, "any ... available", "available?".
-- If you truly cannot tell, intent = UNKNOWN.
+- intent = CREATE_LISTING when the user wants to SELL / RENT OUT / OFFER their OWN item or service: sell, list, post, "add my", "my service", "rent out", "for sale", "for rent", "i am a <job>", "i provide/offer/run".
+- intent = SEARCH_LISTING when the user wants to BUY / FIND / RENT something: need, "looking for", "want to buy", "want to purchase", purchase, buy, "i want a", "any ... available", "available?", required, find, "show me".
+- "sell my car" = CREATE_LISTING. "buy a car" / "purchase a car" / "want a car" = SEARCH_LISTING.
+- Greetings or anything you truly cannot classify = UNKNOWN.
 - category: real_estate (flat/house/plot/land/apartment/villa/room/pg), vehicle (car/bike/scooter/truck/auto), service (plumber/electrician/tutor/carpenter/maid/mechanic/salon/painter), else other.
 - listing_type: for real_estate/vehicle use "sell" or "rent"; for services use "service".
 - price: convert words to a number — "4 lakhs"->400000, "65 lakh"->6500000, "20k"->20000, "1.5 cr"->15000000. Empty if none.
