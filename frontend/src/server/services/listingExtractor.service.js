@@ -167,6 +167,119 @@ export const interpretField = async (field, text) => {
   return { value: clean(text), understood: clean(text).length > 0 };
 };
 
+// ── Marketplace extractor ─────────────────────────────────────────────────────
+// Understands messy/short/broken English-Hindi-Telugu messages for BOTH listing
+// and searching across real-estate, vehicles and services.
+const MARKET_PROMPT = `You are an assistant for a local marketplace. Read the user's message (it may be short, broken English, Hindi/Telugu words, with spelling mistakes) and return ONLY minified JSON:
+{
+ "intent": "CREATE_LISTING" | "SEARCH_LISTING" | "UNKNOWN",
+ "category": "real_estate" | "vehicle" | "service" | "other" | "",
+ "listing_type": "sell" | "rent" | "service" | "buy" | "",
+ "item": "short item/service, e.g. flat, house, plot, car, bike, plumber, electrician, tuition",
+ "title": "a short clean listing title, else empty",
+ "location": "area/locality if any, else empty",
+ "city": "city if any, else empty",
+ "price": "PLAIN NUMBER in rupees, else empty",
+ "contact_number": "10-digit mobile if present, else empty",
+ "description": "one short clean sentence, else empty"
+}
+Rules:
+- intent = CREATE_LISTING for: sell, list, post, "add my", "my service", "rent out", "for sale", "for rent", "i am a <job>", "i provide/offer".
+- intent = SEARCH_LISTING for: need, "looking for", "want to buy", required, "any ... available", "available?".
+- If you truly cannot tell, intent = UNKNOWN.
+- category: real_estate (flat/house/plot/land/apartment/villa/room/pg), vehicle (car/bike/scooter/truck/auto), service (plumber/electrician/tutor/carpenter/maid/mechanic/salon/painter), else other.
+- listing_type: for real_estate/vehicle use "sell" or "rent"; for services use "service".
+- price: convert words to a number — "4 lakhs"->400000, "65 lakh"->6500000, "20k"->20000, "1.5 cr"->15000000. Empty if none.
+- Never invent values. Use "" when absent.`;
+
+async function marketGemini(message) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${env.ai.geminiModel}:generateContent?key=${env.ai.geminiApiKey}`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: MARKET_PROMPT }] },
+      contents: [{ parts: [{ text: message }] }],
+      generationConfig: { responseMimeType: "application/json", temperature: 0.1 },
+    }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return JSON.parse(stripFences((await res.json()).candidates?.[0]?.content?.parts?.[0]?.text || "{}"));
+}
+
+async function marketOpenAI(message) {
+  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${env.ai.openaiApiKey}` },
+    body: JSON.stringify({
+      model: env.ai.openaiModel,
+      temperature: 0.1,
+      response_format: { type: "json_object" },
+      messages: [{ role: "system", content: MARKET_PROMPT }, { role: "user", content: message }],
+    }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return JSON.parse(stripFences((await res.json()).choices?.[0]?.message?.content || "{}"));
+}
+
+const SEARCH_WORDS = ["need", "looking for", "want to buy", "required", "available", "find me", "searching", "kavali", "kaavali"];
+const CREATE_WORDS = ["sell", "list", "post", "add my", "my service", "rent out", "for sale", "for rent", "i am a", "i provide", "i offer", "i run", "my flat", "my house", "my car", "my bike", "list my", "ammali", "ammu"];
+
+function marketHeuristic(message) {
+  const lower = message.toLowerCase();
+  const isSearch = SEARCH_WORDS.some((w) => lower.includes(w));
+  const isCreate = !isSearch && CREATE_WORDS.some((w) => lower.includes(w));
+  let category = "", item = "";
+  const map = {
+    real_estate: ["flat", "house", "plot", "land", "apartment", "villa", "pg", "room", "rent"],
+    vehicle: ["car", "bike", "scooter", "truck", "auto", "swift", "i20"],
+    service: ["plumber", "electric", "tutor", "carpenter", "maid", "mechanic", "salon", "painter", "clean"],
+  };
+  for (const [cat, words] of Object.entries(map)) {
+    const hit = words.find((w) => lower.includes(w));
+    if (hit) { category = cat; item = hit; break; }
+  }
+  const price = (() => {
+    const m = lower.match(/(\d[\d.,]*)\s*(lakh|lac|lk|cr|crore|k|thousand)?/);
+    if (!m) return "";
+    let n = parseFloat(m[1].replace(/,/g, ""));
+    const u = m[2] || "";
+    if (/lakh|lac|lk/.test(u)) n *= 100000;
+    else if (/cr|crore/.test(u)) n *= 10000000;
+    else if (/k|thousand/.test(u)) n *= 1000;
+    return n ? String(Math.round(n)) : "";
+  })();
+  const phone = (message.match(/\b(\d{10})\b/) || [])[1] || "";
+  return {
+    intent: isCreate ? "CREATE_LISTING" : isSearch ? "SEARCH_LISTING" : "UNKNOWN",
+    category, listing_type: lower.includes("rent") ? "rent" : category === "service" ? "service" : "sell",
+    item, title: "", location: "", city: "", price, contact_number: phone, description: "",
+  };
+}
+
+export const extractMarketplace = async (message) => {
+  let raw;
+  try {
+    if (env.ai.provider === "openai" && env.ai.openaiApiKey) raw = await marketOpenAI(message);
+    else if (env.ai.geminiApiKey) raw = await marketGemini(message);
+  } catch (error) {
+    console.error("[extractMarketplace] AI failed, heuristic:", error.message);
+  }
+  if (!raw || !raw.intent) raw = marketHeuristic(message);
+  return {
+    intent: ["CREATE_LISTING", "SEARCH_LISTING", "UNKNOWN"].includes(raw.intent) ? raw.intent : "UNKNOWN",
+    category: clean(raw.category),
+    listing_type: clean(raw.listing_type),
+    item: clean(raw.item),
+    title: clean(raw.title),
+    location: clean(raw.location),
+    city: clean(raw.city),
+    price: clean(raw.price).replace(/\D/g, ""),
+    contact_number: clean(raw.contact_number).replace(/\D/g, "").slice(-10),
+    description: clean(raw.description),
+  };
+};
+
 /** Extract a listing from free text. Always returns a normalized object. */
 export const extractListing = async (message) => {
   let raw;

@@ -1,86 +1,85 @@
 import Listing from "../models/Listing.js";
-import { interpretField } from "./listingExtractor.service.js";
+import { extractMarketplace } from "./listingExtractor.service.js";
 import { triggerRematchForNewListing } from "./followUp.service.js";
 
-// Phrases that signal the user wants to LIST their own business/service (vs search).
-const LISTING_INTENT = [
-  "list my", "list a business", "list a service", "list my business", "list my service",
-  "register my", "register a", "add my business", "add my service", "add a listing",
-  "i want to list", "i want to register", "want to list", "want to register my",
-  "i run a", "i run an", "i own a", "i provide", "i offer", "i sell", "we provide", "we offer",
-  "my shop", "my business", "advertise my", "list business", "want to list my",
+// CREATE-intent keywords (sell/list their own item/service). SEARCH messages fall
+// through to the existing search pipeline, so we exclude obvious search phrases.
+const SEARCH_WORDS = ["need", "looking for", "want to buy", "required", "available?", "find me", "searching"];
+const CREATE_WORDS = [
+  "sell", "list", "post", "add my", "rent out", "for sale", "for rent",
+  "my flat", "my house", "my car", "my bike", "my shop", "my service", "my business",
+  "list my", "want to sell", "want to list", "i am a", "i'm a", "i provide", "i offer", "i run",
+  "register my", "advertise",
 ];
 
 export const isListingIntent = (message = "") => {
   const lower = (message || "").toLowerCase();
-  return LISTING_INTENT.some((p) => lower.includes(p));
+  if (SEARCH_WORDS.some((w) => lower.includes(w))) return false;
+  return CREATE_WORDS.some((w) => lower.includes(w));
 };
 
-// ── small parsers ─────────────────────────────────────────────────────────────
-const isYes = (t) => /\b(yes|yeah|yep|yup|haan|ha|sure|ok|okay|correct|right|done|👍)\b/i.test(t);
-const isNo = (t) => /\b(no|nope|nahi|nai|\bna\b|none|don'?t|cancel)\b/i.test(t);
-const isCancel = (t) => /\b(cancel|stop|exit|quit|leave)\b/i.test(t.trim());
-const firstNumber = (t) => (t.match(/\d[\d,]*/) || [])[0]?.replace(/,/g, "");
-const titleCase = (s) => s.replace(/\b\w/g, (c) => c.toUpperCase());
+// ── helpers ───────────────────────────────────────────────────────────────────
+const titleCase = (s) => (s || "").replace(/\b\w/g, (c) => c.toUpperCase());
+const formatINR = (n) => Number(n).toLocaleString("en-IN");
 
-const STEP_ORDER = [
-  "name", "service", "business_name", "area", "city_state",
-  "mobile", "services", "timing", "price", "experience", "home_service", "review",
-];
+const needsPrice = (d) =>
+  d.listing_type === "sell" || d.listing_type === "rent" || d.category === "real_estate" || d.category === "vehicle";
 
-const summary = (d) =>
-  "📋 *Please check your listing:*\n\n" +
-  `👤 Name: ${d.full_name || "—"}\n` +
-  `🛠️ Service: ${d.service_category || "—"}\n` +
-  `🏪 Business: ${d.business_name || "—"}\n` +
-  `📍 Area: ${[d.area, d.city, d.state].filter(Boolean).join(", ") || "—"}\n` +
-  `📞 Mobile: ${d.mobile_number || "—"}\n` +
-  `🔧 Work: ${d.service_description || "—"}\n` +
-  `🕒 Timing: ${d.available_time || "—"}\n` +
-  `💰 Starting price: ${d.starting_price ? `₹${d.starting_price}` : "—"}\n` +
-  `📅 Experience: ${d.experience || "—"}\n` +
-  `🏠 Home service: ${d.home_service_available ? "Yes" : "No"}\n\n` +
-  "Is this correct? Reply *Yes* to publish, or *No* to change something.";
+// Parse "65 lakhs" / "4 lakh" / "20k" / "1.5 cr" / "400000" -> plain rupee number.
+const parsePrice = (text) => {
+  const m = (text || "").toLowerCase().match(/(\d[\d.,]*)\s*(lakh|lac|lk|cr|crore|k|thousand)?/);
+  if (!m) return "";
+  let n = parseFloat(m[1].replace(/,/g, ""));
+  const u = m[2] || "";
+  if (/lakh|lac|lk/.test(u)) n *= 100000;
+  else if (/cr|crore/.test(u)) n *= 10000000;
+  else if (/k|thousand/.test(u)) n *= 1000;
+  return n ? String(Math.round(n)) : "";
+};
+
+const buildTitle = (d) => {
+  const item = titleCase(d.item || d.category || "Listing");
+  const place = d.location || d.city || "";
+  if (d.category === "service") return `${item} service${place ? ` in ${place}` : ""}`;
+  const verb = d.listing_type === "rent" ? "for rent" : "for sale";
+  return `${item} ${verb}${place ? ` in ${place}` : ""}`;
+};
+
+const priceLabel = (d) => {
+  if (!d.price) return undefined;
+  if (d.listing_type === "rent") return `₹${formatINR(d.price)}/month`;
+  if (d.category === "service") return `₹${formatINR(d.price)} onwards`;
+  return `₹${formatINR(d.price)}`;
+};
 
 const QUESTION = {
-  name: "Great! 🙌 I'll ask a few quick questions and create your listing.\n\nFirst — what's your *name*?",
-  service: "What *service* do you provide? (e.g. plumber, electrician, tuition, tailoring, beauty parlour, mechanic)",
-  business_name: "Do you have a *shop / business name*? If not, just reply *no* and I'll create one for you.",
-  area: "Which *area* do you provide service in? (village / locality name) 📍",
-  city_state: "Which *city and state*?",
-  mobile: "What's your *mobile number* so customers can contact you? (or reply *same* to use this WhatsApp number) 📞",
-  services: "What *work* do you do? Tell me in simple words. 🔧",
-  timing: "What *time* are you available? (e.g. 9 AM to 8 PM)",
-  price: "What's your *starting price* or visit charge? (just a number, or reply *skip*)",
-  experience: "How many *years of experience* do you have? (or reply *skip*)",
-  home_service: "Do you *visit customer homes*? (yes / no)",
+  item: "Sure! What would you like to list? (e.g. *flat*, *car*, *plumber service*) 🙂",
+  location: "Where is it located? Please tell the *area / city*. 📍",
+  price_sell: "What *price* do you want? (e.g. 5 lakhs, 4,00,000)",
+  price_rent: "What's the *monthly rent*? (e.g. 12000)",
+  contact_number: "Please share your *mobile number* so people can contact you. (or reply *same* to use this WhatsApp number) 📞",
 };
 
 async function createListing(d, contact) {
-  const place = [d.area, d.city, d.state].filter(Boolean).join(", ");
+  const place = [d.location, d.city].filter(Boolean).join(", ");
   const listing = await Listing.create({
-    title: d.business_name || `${d.full_name || ""} ${d.service_category || "Service"}`.trim(),
-    category: d.service_category,
-    location: place || d.area,
-    description: d.service_description || undefined,
-    services: d.service_description || undefined,
-    priceLabel: d.starting_price ? `₹${d.starting_price} onwards` : undefined,
-    budget: Number(d.starting_price) || undefined,
-    availability: d.available_time || undefined,
-    timings: d.available_time || undefined,
-    contactName: d.full_name || undefined,
-    ownerName: d.full_name || undefined,
-    ownerPhone: d.mobile_number || contact.phone || undefined,
-    contactPhone: d.mobile_number || contact.phone || undefined,
-    phoneVerified: true, // captured directly from the user on WhatsApp
+    title: d.title || buildTitle(d),
+    category: titleCase(d.item || d.category || "Listing"),
+    location: place || d.location || d.city,
+    description: d.description || undefined,
+    priceLabel: priceLabel(d),
+    budget: Number(d.price) || undefined,
+    ownerName: d.user_name || undefined,
+    ownerPhone: d.contact_number || contact.phone || undefined,
+    contactPhone: d.contact_number || contact.phone || undefined,
+    phoneVerified: false, // captured, not OTP-verified (verification added later)
     status: "active",
+    keywords: [d.item, d.category, d.listing_type, d.location, d.city].filter(Boolean).map((s) => String(s).toLowerCase()),
     metadata: {
-      area: d.area || undefined,
+      marketCategory: d.category || undefined,
+      listingType: d.listing_type || undefined,
+      area: d.location || undefined,
       city: d.city || undefined,
-      state: d.state || undefined,
-      pincode: d.pincode || undefined,
-      experience: d.experience || undefined,
-      homeService: Boolean(d.home_service_available),
       source: "whatsapp",
     },
   });
@@ -88,168 +87,72 @@ async function createListing(d, contact) {
   return listing;
 }
 
-// Drives the guided, one-question-at-a-time listing conversation. Stores state in
-// conversation.metadata.wizard and flowStage="listing" while active.
+const summary = (l, d) =>
+  "✅ *Listed successfully!* People can now find and contact you.\n\n" +
+  `*${l.title}*\n` +
+  `🏷️ ${l.category}${d.listing_type ? ` · ${titleCase(d.listing_type)}` : ""}\n` +
+  `📍 ${l.location}` +
+  (l.priceLabel ? `\n💰 ${l.priceLabel}` : "") +
+  `\n📞 ${l.contactPhone || "—"}\n\n` +
+  'Message me anytime to list another item, or to *search* for something.';
+
+// CREATE-listing agent: extracts structure from each message, asks only for the
+// missing required fields (mobile mandatory), then saves a clean listing. No OTP.
 export const handleListingFlow = async ({ message, conversation, contact }) => {
   const text = (message || "").trim();
-  let w = conversation.metadata?.wizard;
 
-  // Allow the user to bail out at any point.
-  if (w?.active && isCancel(text)) {
-    conversation.metadata = { ...conversation.metadata, wizard: null, flowStage: null };
+  if (/\b(cancel|stop|exit|quit)\b/i.test(text) && conversation.metadata?.market) {
+    conversation.metadata = { ...conversation.metadata, market: null, flowStage: null };
     conversation.markModified("metadata");
-    return "No problem — I've cancelled that. 👍 Message me anytime to list your business or to search for a service.";
+    return "No problem — cancelled. 👍 Message me anytime to list or search.";
   }
 
-  // ── Start the wizard (don't consume the trigger message as an answer) ────────
-  if (!w?.active) {
-    w = { active: true, step: "name", data: {}, status: "collecting_details" };
-    conversation.metadata = { ...conversation.metadata, wizard: w, flowStage: "listing" };
-    conversation.markModified("metadata");
-    return QUESTION.name;
+  const state = conversation.metadata?.market || { data: {} };
+  state.data ||= {};
+  const d = state.data;
+
+  // Re-extract from the latest message, but only FILL EMPTY fields — never
+  // overwrite already-collected data with a noisy single-word re-extraction.
+  const ex = await extractMarketplace(text);
+  for (const f of ["category", "listing_type", "item", "title", "location", "city", "price", "description"]) {
+    if (ex[f] && !d[f]) d[f] = ex[f];
+  }
+  // Mobile: accept an extracted number, or "same/this" to reuse the WhatsApp number.
+  if (ex.contact_number && !d.contact_number) d.contact_number = ex.contact_number;
+  else if (/\b(same|this|whatsapp number|use this)\b/i.test(text) && contact.phone) d.contact_number = contact.phone.replace(/\D/g, "").slice(-10);
+
+  // If the user is answering the exact question we asked, assign it directly —
+  // robust even when the AI is rate-limited and re-extraction returns empty.
+  const awaiting = state.awaiting;
+  if (awaiting === "item" && !d.item && !d.category) d.item = text.toLowerCase().slice(0, 40);
+  if (awaiting === "location" && !d.location && !d.city) d.location = titleCase(text);
+  if (awaiting === "price" && needsPrice(d) && !d.price) d.price = parsePrice(text);
+  if (awaiting === "contact_number" && !d.contact_number) {
+    const ph = (text.match(/\d{10}/) || [])[0];
+    if (ph) d.contact_number = ph;
   }
 
-  // IMPORTANT: keep `d` pointing at w.data so collected fields persist across messages.
-  w.data ||= {};
-  const d = w.data;
-  const advance = (nextStep) => {
-    w.step = nextStep;
-    conversation.metadata = { ...conversation.metadata, wizard: w, flowStage: "listing" };
-    conversation.markModified("metadata");
-  };
+  // Work out what's still missing.
+  const missing = [];
+  if (!d.item && !d.category) missing.push("item");
+  if (!d.location && !d.city) missing.push("location");
+  if (needsPrice(d) && !d.price) missing.push("price");
+  if (!d.contact_number) missing.push("contact_number");
 
-  let ack = "";
-  switch (w.step) {
-    case "name": {
-      d.full_name = titleCase(text.replace(/^(my name is|i am|i'm|this is)\s+/i, "").trim()) || "Customer";
-      advance("service");
-      return `Thanks ${d.full_name}! 🙂\n\n${QUESTION.service}`;
-    }
-    case "service": {
-      const r = await interpretField("service_category", text);
-      if (!r.value) return `No problem — I'll help. Do you *repair, sell, teach, drive, cook, clean,* or provide another service?\n\n${QUESTION.service}`;
-      d.service_category = r.value;
-      ack = `Good — *${d.service_category}* service. 👍`;
-      advance("business_name");
-      return `${ack}\n\n${QUESTION.business_name}`;
-    }
-    case "business_name": {
-      if (isNo(text) || text.length < 2) d.business_name = `${d.full_name} ${d.service_category} Service`;
-      else d.business_name = titleCase(text);
-      ack = `Okay — I'll list it as *${d.business_name}*.`;
-      advance("area");
-      return `${ack}\n\n${QUESTION.area}`;
-    }
-    case "area": {
-      d.area = titleCase(text);
-      ack = `Service area: *${d.area}*. ✅`;
-      advance("city_state");
-      return `${ack}\n\n${QUESTION.city_state}`;
-    }
-    case "city_state": {
-      const r = await interpretField("city_state", text);
-      const [city, state] = (r.value || text).split(",").map((s) => s.trim());
-      d.city = city ? titleCase(city) : undefined;
-      d.state = state ? titleCase(state) : undefined;
-      ack = `Got it: *${[d.city, d.state].filter(Boolean).join(", ")}*.`;
-      advance("mobile");
-      return `${ack}\n\n${QUESTION.mobile}`;
-    }
-    case "mobile": {
-      if (/\b(same|this|whatsapp|yes)\b/i.test(text) && contact.phone) d.mobile_number = contact.phone;
-      else {
-        const digits = text.replace(/\D/g, "");
-        if (digits.length < 10) return `Please send a valid mobile number. ${QUESTION.mobile}`;
-        d.mobile_number = digits.slice(-10);
-      }
-      advance("services");
-      return `Saved 📞 *${d.mobile_number}*.\n\n${QUESTION.services}`;
-    }
-    case "services": {
-      const r = await interpretField("service_description", text);
-      d.service_description = r.value || text;
-      ack = `Added: *${d.service_description}*. ✅`;
-      advance("timing");
-      return `${ack}\n\n${QUESTION.timing}`;
-    }
-    case "timing": {
-      const r = await interpretField("available_time", text);
-      d.available_time = r.value || text;
-      ack = `Available: *${d.available_time}*.`;
-      advance("price");
-      return `${ack}\n\n${QUESTION.price}`;
-    }
-    case "price": {
-      if (!/skip|no|later/i.test(text)) d.starting_price = firstNumber(text) || undefined;
-      ack = d.starting_price ? `Starting charge ₹${d.starting_price}.` : "Okay, no fixed price.";
-      advance("experience");
-      return `${ack}\n\n${QUESTION.experience}`;
-    }
-    case "experience": {
-      if (!/skip|no|later/i.test(text)) {
-        const n = firstNumber(text);
-        d.experience = n ? `${n} years` : text;
-      }
-      ack = d.experience ? `Experience: ${d.experience}.` : "Okay.";
-      advance("home_service");
-      return `${ack}\n\n${QUESTION.home_service}`;
-    }
-    case "home_service": {
-      d.home_service_available = isYes(text) && !isNo(text);
-      w.status = "review_pending";
-      advance("review");
-      return `${d.home_service_available ? "Home service: Yes. 🏠" : "Okay."}\n\n${summary(d)}`;
-    }
-    case "review": {
-      if (isYes(text) && !isNo(text)) {
-        const listing = await createListing(d, contact);
-        conversation.metadata = { ...conversation.metadata, wizard: null, flowStage: null };
-        conversation.markModified("metadata");
-        return (
-          "✅ *Your listing is live!* Customers can now find and contact you.\n\n" +
-          `*${listing.title}* — ${listing.category} in ${listing.location}\n\n` +
-          'Message me anytime to update it, list another business, or search for a service.'
-        );
-      }
-      // "No" → let them fix one field, then re-show the summary.
-      w.step = "edit";
-      conversation.metadata = { ...conversation.metadata, wizard: w, flowStage: "listing" };
-      conversation.markModified("metadata");
-      return "No problem — what should I change? Reply like *price 250*, *area Kukatpally*, *service plumber*, *timing 9am to 9pm*, or *name Ramesh*. Type *done* when finished.";
-    }
-    case "edit": {
-      if (/\bdone\b/i.test(text)) {
-        w.step = "review";
-        conversation.metadata = { ...conversation.metadata, wizard: w, flowStage: "listing" };
-        conversation.markModified("metadata");
-        return summary(d);
-      }
-      const m = text.match(/^\s*(\w+)\s+(.*)$/);
-      if (m) {
-        const field = m[1].toLowerCase();
-        const val = m[2].trim();
-        if (field === "name") d.full_name = titleCase(val);
-        else if (field === "service") d.service_category = (await interpretField("service_category", val)).value || val;
-        else if (field === "business") d.business_name = titleCase(val);
-        else if (field === "area") d.area = titleCase(val);
-        else if (field === "city") d.city = titleCase(val);
-        else if (field === "mobile") d.mobile_number = val.replace(/\D/g, "").slice(-10);
-        else if (field === "work" || field === "services") d.service_description = val;
-        else if (field === "timing") d.available_time = val;
-        else if (field === "price") d.starting_price = firstNumber(val);
-        else if (field === "experience") d.experience = /\d/.test(val) ? `${firstNumber(val)} years` : val;
-      }
-      conversation.metadata = { ...conversation.metadata, wizard: w, flowStage: "listing" };
-      conversation.markModified("metadata");
-      return `Updated ✅. Change anything else, or type *done* to review.`;
-    }
-    default: {
-      // Shouldn't happen — reset gracefully.
-      conversation.metadata = { ...conversation.metadata, wizard: null, flowStage: null };
-      conversation.markModified("metadata");
-      return "Let's start again — type *list my business* to begin.";
-    }
+  if (missing.length) {
+    const first = missing[0];
+    state.awaiting = first;
+    conversation.metadata = { ...conversation.metadata, market: state, flowStage: "listing" };
+    conversation.markModified("metadata");
+    if (first === "price") return d.listing_type === "rent" ? QUESTION.price_rent : QUESTION.price_sell;
+    return QUESTION[first];
   }
+
+  // Everything present → create + confirm.
+  const listing = await createListing(d, contact);
+  conversation.metadata = { ...conversation.metadata, market: null, flowStage: null };
+  conversation.markModified("metadata");
+  return summary(listing, d);
 };
 
 export default handleListingFlow;

@@ -36,7 +36,9 @@ const listingSchema = new mongoose.Schema(
     services: { type: String, trim: true }, // free text — what the business does
     status: {
       type: String,
-      enum: ["active", "inactive", "matched", "archived"],
+      // "draft" = created via WhatsApp but awaiting OTP verification; becomes
+      // "active" (searchable) once the owner's mobile is verified.
+      enum: ["draft", "active", "inactive", "matched", "archived"],
       default: "active",
     },
     // Which admin/supervisor added this listing (territory attribution).

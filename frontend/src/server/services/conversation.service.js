@@ -8,6 +8,7 @@ import Message from "../models/Message.js";
 import { analyzeRequirement, buildAck, buildFollowUpQuestion, buildMatchReply, buildWelcomeMenu } from "./aiAgent.service.js";
 import { markMatchesSent, scheduleFollowUp } from "./followUp.service.js";
 import { handleListingFlow, isListingIntent } from "./listingFlow.service.js";
+import { handleMarketplaceSearch, isSearchIntent } from "./marketplaceSearch.service.js";
 import { findMatchesForLead } from "./matching.service.js";
 import { sendMessage } from "./messaging.service.js";
 import {
@@ -240,6 +241,17 @@ export const processInboundMessage = async (commonMessage) => {
     const sendResult = await sendMessage({ channel: commonMessage.channel, to: commonMessage.contactId, text: reply });
     await saveOutboundMessage(reply, channel, contact, conversation, sendResult);
     return { conversation, lead: conversation.lead || null, reply, matches: [], intent: "listing" };
+  }
+
+  // ── Marketplace search flow — the user is LOOKING for something ──────────────
+  if (conversation.metadata?.flowStage === "search" || isSearchIntent(commonMessage.message)) {
+    const reply = await handleMarketplaceSearch({ message: commonMessage.message, conversation, contact });
+    conversation.lastMessage = reply;
+    conversation.lastMessageAt = new Date();
+    await conversation.save();
+    const sendResult = await sendMessage({ channel: commonMessage.channel, to: commonMessage.contactId, text: reply });
+    await saveOutboundMessage(reply, channel, contact, conversation, sendResult);
+    return { conversation, lead: conversation.lead || null, reply, matches: [], intent: "search" };
   }
 
   // Customer picked an option ("1", "2"…) after seeing matches — treat it as
