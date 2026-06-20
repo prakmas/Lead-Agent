@@ -111,6 +111,62 @@ function heuristicExtract(message) {
 
 const clean = (v) => (typeof v === "string" ? v.trim() : "");
 
+// ── Single-field interpreter ──────────────────────────────────────────────────
+// Cleans one messy answer at a time for the listing wizard (allows spelling
+// mistakes, vague words). Returns { value, understood }.
+const FIELD_RULES = {
+  service_category:
+    'Map to ONE clean service category in Title Case (e.g. Electrician, Plumbing, "AC Service & Repair", Salon, "Beauty Parlour", Tutoring, Tailoring, Mechanic, Carpenter, Catering, Cleaning, Painter, "Mobile Repair"). Vague answers like "current work"->Electrician, "light fan work"->Electrician. understood=false ONLY if truly impossible to guess.',
+  service_description:
+    'Rewrite the messy text into a clean, comma-separated list of services in simple English. e.g. "elec work fan light"->"Fan repair, light fitting, electrical work".',
+  available_time:
+    'Normalize to a short time range. e.g. "morning 9 to night 8"->"9 AM to 8 PM", "all day"->"All day".',
+  city_state: 'Return "City, State" in Title Case. e.g. "hyderabad telangana"->"Hyderabad, Telangana".',
+};
+
+export const interpretField = async (field, text) => {
+  const rule = FIELD_RULES[field];
+  if (!rule) return { value: clean(text), understood: true };
+  const system = `You clean ONE field for a service-listing wizard. Field="${field}". ${rule}\nReturn ONLY minified JSON: {"value":"...","understood":true|false}. Never invent unrelated info.`;
+  try {
+    let raw;
+    if (env.ai.provider === "openai" && env.ai.openaiApiKey) {
+      const res = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${env.ai.openaiApiKey}` },
+        body: JSON.stringify({
+          model: env.ai.openaiModel,
+          temperature: 0.1,
+          response_format: { type: "json_object" },
+          messages: [{ role: "system", content: system }, { role: "user", content: text }],
+        }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      raw = JSON.parse(stripFences((await res.json()).choices?.[0]?.message?.content || "{}"));
+    } else if (env.ai.geminiApiKey) {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${env.ai.geminiModel}:generateContent?key=${env.ai.geminiApiKey}`;
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: system }] },
+          contents: [{ parts: [{ text }] }],
+          generationConfig: { responseMimeType: "application/json", temperature: 0.1 },
+        }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      raw = JSON.parse(stripFences((await res.json()).candidates?.[0]?.content?.parts?.[0]?.text || "{}"));
+    }
+    if (raw && typeof raw.value === "string") {
+      return { value: raw.value.trim(), understood: raw.understood !== false };
+    }
+  } catch (error) {
+    console.error(`[interpretField:${field}] AI failed:`, error.message);
+  }
+  // Fallback: return the raw text as-is.
+  return { value: clean(text), understood: clean(text).length > 0 };
+};
+
 /** Extract a listing from free text. Always returns a normalized object. */
 export const extractListing = async (message) => {
   let raw;
