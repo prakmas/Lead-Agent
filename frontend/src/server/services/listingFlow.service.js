@@ -133,20 +133,51 @@ export const handleListingFlow = async ({ message, conversation, contact, preExt
   for (const f of ["category", "listing_type", "item", "title", "society", "address", "location", "city", "pincode", "price", "description"]) {
     if (ex[f] && !d[f]) d[f] = ex[f];
   }
-  // Mobile: accept an extracted number, or "same/this" to reuse the WhatsApp number.
+  // Mobile: accept an extracted number, or "same/this" to reuse the WhatsApp number —
+  // but only when we're actually asking for the phone (so "same like above" in an
+  // address answer doesn't silently set the phone).
   if (ex.contact_number && !d.contact_number) d.contact_number = ex.contact_number;
-  else if (/\b(same|this|whatsapp number|use this)\b/i.test(text) && contact.phone) d.contact_number = contact.phone.replace(/\D/g, "").slice(-10);
+  else if (
+    contact.phone &&
+    !d.contact_number &&
+    (state.awaiting === "contact_number" || /^(same|this|use this( number)?|same number|this number)\.?$/i.test(text.trim()))
+  )
+    d.contact_number = contact.phone.replace(/\D/g, "").slice(-10);
+
+  // "same / above / previous / as we listed" → reuse the user's most recent listing.
+  const REF = /\b(same|above|previous|last|as listed|we listed|like (above|before)|earlier|as before)\b/i;
+  let _prev;
+  const getPrev = async () => {
+    if (_prev === undefined) _prev = (contact.phone ? await Listing.findOne({ "metadata.whatsappFrom": contact.phone }).sort({ createdAt: -1 }) : null) || null;
+    return _prev;
+  };
 
   // If the user is answering the exact question we asked, assign it directly —
   // robust even when the AI is rate-limited and re-extraction returns empty.
   const awaiting = state.awaiting;
   if (awaiting === "item" && !d.item && !d.category) d.item = text.toLowerCase().slice(0, 40);
   if (awaiting === "location" && !d.location && !d.city) d.location = titleCase(text);
-  if (awaiting === "address") d.address = text.trim(); // their full reply IS the address
+  if (awaiting === "address") {
+    if (REF.test(text)) {
+      const prev = await getPrev();
+      if (prev?.address) {
+        // Keep a newly-given door/unit number, reuse the rest from the last listing.
+        const door = (text.match(/\b\d+\s*[-/]\s*\d+\w?\b/) || text.match(/\b(?:flat|apt|apartment|unit|door|no\.?|#)\s*\S+/i) || [])[0] || "";
+        d.address = door ? `${door.trim()}, ${prev.address.replace(/^\s*[^,]+,\s*/, "")}` : prev.address;
+        if (!d.society && prev.metadata?.society) d.society = prev.metadata.society;
+        if (!d.location && prev.metadata?.area) d.location = prev.metadata.area;
+        if (!d.city && prev.metadata?.city) d.city = prev.metadata.city;
+        if (!d.pincode && prev.metadata?.pincode && prev.metadata.pincode !== "-") d.pincode = prev.metadata.pincode;
+      } else d.address = text.trim();
+    } else d.address = text.trim();
+  }
   if (awaiting === "pincode" && !d.pincode) {
     const pin = (text.match(/\b\d{5}\b/) || [])[0];
     if (pin) d.pincode = pin;
-    else if (/^(skip|no|none|na|don'?t\s*know|dont\s*know)$/i.test(text.trim())) d.pincode = "-";
+    else if (REF.test(text)) {
+      const prev = await getPrev();
+      if (prev?.metadata?.pincode && prev.metadata.pincode !== "-") d.pincode = prev.metadata.pincode;
+    } else if (/^(skip|no|none|na|don'?t\s*know|dont\s*know)$/i.test(text.trim())) d.pincode = "-";
   }
   if (awaiting === "price" && needsPrice(d) && !d.price) d.price = parsePrice(text);
   if (awaiting === "contact_number" && !d.contact_number) {
