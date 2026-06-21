@@ -181,9 +181,11 @@ export const processInboundMessage = async (commonMessage) => {
     conversation.markModified("metadata");
   }
 
-  // A standalone 6-digit number = an Indian pincode. Resolve it to its area so
-  // the customer can type "560034" instead of spelling "Koramangala".
-  if (/^\d{6}$/.test(commonMessage.message.trim())) {
+  // A standalone 6-digit number = an Indian pincode. Resolve it to its area so a
+  // searcher can type "560034" instead of spelling "Koramangala". BUT when we're
+  // collecting a listing we need the raw pincode (the create flow stores it), so
+  // skip the rewrite mid-listing.
+  if (/^\d{6}$/.test(commonMessage.message.trim()) && conversation.metadata?.flowStage !== "listing") {
     const resolved = await resolvePincode(commonMessage.message.trim());
     // Use the district (e.g. "Hyderabad") rather than the hyper-local post-office
     // name (e.g. "Cyberabad") so it reliably matches city-level listings.

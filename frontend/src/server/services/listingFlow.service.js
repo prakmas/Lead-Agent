@@ -55,17 +55,29 @@ const priceLabel = (d) => {
 const QUESTION = {
   item: "Sure! What would you like to list? (e.g. *flat*, *car*, *plumber service*) 🙂",
   location: "Where is it located? Please tell the *area / city*. 📍",
+  address:
+    "🏢 Please share the *full address* — *apartment / society name, flat / door no, area*.\n(e.g. _My Home Avatar, Flat 402, Madhapur_)",
+  pincode: "📮 What's the *6-digit pincode*? (helps buyers find the exact spot — reply *skip* if you don't know)",
   price_sell: "What *price* do you want? (e.g. 5 lakhs, 4,00,000)",
   price_rent: "What's the *monthly rent*? (e.g. 12000)",
   contact_number: "Please share your *mobile number* so people can contact you. (or reply *same* to use this WhatsApp number) 📞",
 };
 
 async function createListing(d, contact) {
-  const place = [d.location, d.city].filter(Boolean).join(", ");
+  const isRealEstate = d.category === "real_estate";
+  const pin = d.pincode && d.pincode !== "-" ? d.pincode : "";
+  // Real estate: the full address the user typed IS the location line; fall back to
+  // structured parts when no free-text address was given (e.g. one-shot listings).
+  const cityLine = [d.location, d.city].filter(Boolean).join(", ");
+  let base = isRealEstate ? d.address || [d.society, cityLine].filter(Boolean).join(", ") : cityLine || d.location || d.city;
+  if (isRealEstate && d.city && base && !base.toLowerCase().includes(d.city.toLowerCase())) base = `${base}, ${d.city}`;
+  const fullLocation = [base, pin && `PIN ${pin}`].filter(Boolean).join(" - ");
+
   const listing = await Listing.create({
     title: d.title || buildTitle(d),
     category: titleCase(d.item || d.category || "Listing"),
-    location: place || d.location || d.city,
+    location: fullLocation || base,
+    address: d.address || undefined,
     description: d.description || undefined,
     priceLabel: priceLabel(d),
     budget: Number(d.price) || undefined,
@@ -74,12 +86,14 @@ async function createListing(d, contact) {
     contactPhone: d.contact_number || contact.phone || undefined,
     phoneVerified: false, // captured, not OTP-verified (verification added later)
     status: "active",
-    keywords: [d.item, d.category, d.listing_type, d.location, d.city].filter(Boolean).map((s) => String(s).toLowerCase()),
+    keywords: [d.item, d.category, d.listing_type, d.society, d.location, d.city, pin].filter(Boolean).map((s) => String(s).toLowerCase()),
     metadata: {
       marketCategory: d.category || undefined,
       listingType: d.listing_type || undefined,
+      society: d.society || undefined,
       area: d.location || undefined,
       city: d.city || undefined,
+      pincode: pin || undefined,
       source: "whatsapp",
       whatsappFrom: contact.phone || undefined, // the WhatsApp sender (for own-listing detection)
     },
@@ -115,7 +129,7 @@ export const handleListingFlow = async ({ message, conversation, contact, preExt
   // Re-extract from the latest message, but only FILL EMPTY fields — never
   // overwrite already-collected data with a noisy single-word re-extraction.
   const ex = preExtracted || (await extractMarketplace(text));
-  for (const f of ["category", "listing_type", "item", "title", "location", "city", "price", "description"]) {
+  for (const f of ["category", "listing_type", "item", "title", "society", "address", "location", "city", "pincode", "price", "description"]) {
     if (ex[f] && !d[f]) d[f] = ex[f];
   }
   // Mobile: accept an extracted number, or "same/this" to reuse the WhatsApp number.
@@ -127,16 +141,29 @@ export const handleListingFlow = async ({ message, conversation, contact, preExt
   const awaiting = state.awaiting;
   if (awaiting === "item" && !d.item && !d.category) d.item = text.toLowerCase().slice(0, 40);
   if (awaiting === "location" && !d.location && !d.city) d.location = titleCase(text);
+  if (awaiting === "address") d.address = text.trim(); // their full reply IS the address
+  if (awaiting === "pincode" && !d.pincode) {
+    const pin = (text.match(/\b\d{6}\b/) || [])[0];
+    if (pin) d.pincode = pin;
+    else if (/^(skip|no|none|na|don'?t\s*know|dont\s*know)$/i.test(text.trim())) d.pincode = "-";
+  }
   if (awaiting === "price" && needsPrice(d) && !d.price) d.price = parsePrice(text);
   if (awaiting === "contact_number" && !d.contact_number) {
     const ph = (text.match(/\d{10}/) || [])[0];
     if (ph) d.contact_number = ph;
   }
 
-  // Work out what's still missing.
+  // Work out what's still missing. Real estate needs a precise address + pincode
+  // (a bare city is not enough to make a property findable).
+  const isRealEstate = d.category === "real_estate";
   const missing = [];
   if (!d.item && !d.category) missing.push("item");
-  if (!d.location && !d.city) missing.push("location");
+  if (isRealEstate) {
+    if (!d.address && !d.society) missing.push("address");
+    if (!d.pincode) missing.push("pincode");
+  } else if (!d.location && !d.city) {
+    missing.push("location");
+  }
   if (needsPrice(d) && !d.price) missing.push("price");
   if (!d.contact_number) missing.push("contact_number");
 

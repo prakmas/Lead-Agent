@@ -175,8 +175,11 @@ const MARKET_PROMPT = `You are an assistant for a local marketplace. Read the us
  "listing_type": "sell" | "rent" | "service" | "buy" | "",
  "item": "short item/service, e.g. flat, house, plot, car, bike, plumber, electrician, tuition",
  "title": "a short clean listing title, else empty",
+ "society": "apartment/society/building/project/gated-community name if any, else empty",
+ "address": "flat/door no + block + street/road as a single line if mentioned, else empty",
  "location": "area/locality if any, else empty",
  "city": "city if any, else empty",
+ "pincode": "6-digit Indian pincode if present, else empty",
  "price": "PLAIN NUMBER in rupees, else empty",
  "contact_number": "10-digit mobile if present, else empty",
  "description": "one short clean sentence, else empty"
@@ -188,6 +191,7 @@ Rules:
 - Greetings or anything you truly cannot classify = UNKNOWN.
 - category: real_estate (flat/house/plot/land/apartment/villa/room/pg), vehicle (car/bike/scooter/truck/auto), service (plumber/electrician/tutor/carpenter/maid/mechanic/salon/painter), else other.
 - listing_type: for real_estate/vehicle use "sell" or "rent"; for services use "service".
+- For real_estate, also capture society (building/project name), address (flat/door no + street), location (area/locality), city and pincode whenever the user gives them. Never invent them.
 - price: convert words to a number — "4 lakhs"->400000, "65 lakh"->6500000, "20k"->20000, "1.5 cr"->15000000. Empty if none.
 - Never invent values. Use "" when absent.`;
 
@@ -266,8 +270,11 @@ export const extractMarketplace = async (message) => {
     listing_type: clean(raw.listing_type),
     item: clean(raw.item),
     title: clean(raw.title),
+    society: clean(raw.society),
+    address: clean(raw.address),
     location: clean(raw.location),
     city: clean(raw.city),
+    pincode: clean(raw.pincode).replace(/\D/g, "").slice(0, 6),
     price: clean(raw.price).replace(/\D/g, ""),
     contact_number: clean(raw.contact_number).replace(/\D/g, "").slice(-10),
     description: clean(raw.description),
