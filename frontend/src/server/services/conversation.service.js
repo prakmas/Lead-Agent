@@ -216,28 +216,37 @@ export const processInboundMessage = async (commonMessage) => {
     return { conversation, lead: conversation.lead || null, reply, matches: [], intent: "handoff" };
   }
 
-  // Greeting / thanks — only when we're NOT mid-question (so a one-word answer to
-  // "Which location?" isn't mistaken for small talk).
-  if (conversation.status !== "waiting" && (convIntent === "greeting" || convIntent === "end")) {
-    let reply;
-    if (convIntent === "greeting") {
-      reply = buildWelcomeMenu();
-      conversation.metadata = { ...conversation.metadata, flowStage: null };
-      conversation.markModified("metadata");
-    } else {
-      reply = "You're welcome! 😊 Whenever you need a place, a roommate, or a service, just message me here. Have a great day!";
-    }
+  // A GREETING means the previous task is finished — reset everything and welcome,
+  // even mid-flow (so the user never has to type "done"; "Hi" starts fresh).
+  if (convIntent === "greeting") {
+    conversation.metadata = { ...conversation.metadata, market: null, search: null, flowStage: null };
+    conversation.markModified("metadata");
+    const reply = buildWelcomeMenu();
+    conversation.status = "open";
     conversation.lastMessage = reply;
     conversation.lastMessageAt = new Date();
     await conversation.save();
     const sendResult = await sendMessage({ channel: commonMessage.channel, to: commonMessage.contactId, text: reply });
     await saveOutboundMessage(reply, channel, contact, conversation, sendResult);
-    return { conversation, lead: conversation.lead || null, reply, matches: [], intent: convIntent };
+    return { conversation, lead: conversation.lead || null, reply, matches: [], intent: "greeting" };
+  }
+
+  // Thanks / bye — also wraps up the current task and resets state.
+  if (conversation.status !== "waiting" && convIntent === "end") {
+    conversation.metadata = { ...conversation.metadata, market: null, search: null, flowStage: null };
+    conversation.markModified("metadata");
+    const reply = "You're welcome! 😊 Whenever you want to *list* or *find* something, just message me here. Have a great day!";
+    conversation.lastMessage = reply;
+    conversation.lastMessageAt = new Date();
+    await conversation.save();
+    const sendResult = await sendMessage({ channel: commonMessage.channel, to: commonMessage.contactId, text: reply });
+    await saveOutboundMessage(reply, channel, contact, conversation, sendResult);
+    return { conversation, lead: conversation.lead || null, reply, matches: [], intent: "end" };
   }
 
   // Explicit "done" — the user finished. Reset ALL flow state so the next request
   // starts completely fresh and never carries over a previous listing/search.
-  if (/^(done|i'?m done|all done|that'?s all|that'?s it|finished|finish|nothing else|nothing more|no more|all set|that is all)\s*[.!]?$/i.test(commonMessage.message.trim())) {
+  if (/^(done|i'?m done|all done|that'?s all|that'?s it|finished|finish|nothing else|nothing more|no more|all set|that is all|stop|cancel|no thanks|no thank you)\s*[.!]?$/i.test(commonMessage.message.trim())) {
     conversation.metadata = { ...conversation.metadata, market: null, search: null, flowStage: null };
     conversation.markModified("metadata");
     const reply = "👍 All done! Whenever you want to *list* something or *find* something, just message me. Have a great day! 😊";
