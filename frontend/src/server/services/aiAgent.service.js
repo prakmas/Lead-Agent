@@ -15,13 +15,13 @@ export const buildWelcomeMenu = () => {
     "━━━━━━━━━━━━━━━\n" +
     "🛒 *SELL / RENT* something\n" +
     "Just tell me, like:\n" +
-    '_“sell my car for 4 lakhs”_\n' +
-    '_“rent my flat for 12000”_\n' +
-    '_“i am a plumber”_\n\n' +
+    '_“sell my car for $4,000”_\n' +
+    '_“rent my apartment for $1,200”_\n' +
+    '_“i’m a plumber”_\n\n' +
     "🔎 *BUY / FIND* something\n" +
     "Tell me what you need:\n" +
-    '_“looking for a car in Hyderabad”_\n' +
-    '_“need a plumber in Kukatpally”_\n' +
+    '_“looking for a car in Austin”_\n' +
+    '_“need a plumber in Dallas”_\n' +
     "━━━━━━━━━━━━━━━\n" +
     "So… what would you like to do today? 😊"
   );

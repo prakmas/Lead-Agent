@@ -177,10 +177,10 @@ const MARKET_PROMPT = `You are an assistant for a local marketplace. Read the us
  "title": "a short clean listing title, else empty",
  "society": "apartment/society/building/project/gated-community name if any, else empty",
  "address": "flat/door no + block + street/road as a single line if mentioned, else empty",
- "location": "area/locality if any, else empty",
+ "location": "area/neighborhood if any, else empty",
  "city": "city if any, else empty",
- "pincode": "6-digit Indian pincode if present, else empty",
- "price": "PLAIN NUMBER in rupees, else empty",
+ "pincode": "5-digit US ZIP code if present, else empty",
+ "price": "PLAIN NUMBER in US dollars, else empty",
  "contact_number": "10-digit mobile if present, else empty",
  "description": "one short clean sentence, else empty"
 }
@@ -189,10 +189,10 @@ Rules:
 - intent = SEARCH_LISTING when the user wants to BUY / FIND / RENT something: need, "looking for", "want to buy", "want to purchase", purchase, buy, "i want a", "any ... available", "available?", required, find, "show me".
 - "sell my car" = CREATE_LISTING. "buy a car" / "purchase a car" / "want a car" = SEARCH_LISTING.
 - Greetings or anything you truly cannot classify = UNKNOWN.
-- category: real_estate (flat/house/plot/land/apartment/villa/room/pg), vehicle (car/bike/scooter/truck/auto), service (plumber/electrician/tutor/carpenter/maid/mechanic/salon/painter), else other.
+- category: real_estate (apartment/house/condo/townhouse/studio/room/land/property), vehicle (car/truck/suv/sedan/motorcycle/van/boat), service (plumber/electrician/handyman/cleaning/landscaping/tutor/mover/hvac/mechanic/painter), else other.
 - listing_type: for real_estate/vehicle use "sell" or "rent"; for services use "service".
-- For real_estate, also capture society (building/project name), address (flat/door no + street), location (area/locality), city and pincode whenever the user gives them. Never invent them.
-- price: convert words to a number — "4 lakhs"->400000, "65 lakh"->6500000, "20k"->20000, "1.5 cr"->15000000. Empty if none.
+- For real_estate, also capture society (building/community name), address (apt/unit no + street), location (neighborhood/area), city and pincode (ZIP) whenever the user gives them. Never invent them.
+- This is a US marketplace. price: convert to a plain dollar number — "$4,000"->4000, "25k"->25000, "1.2 million"->1200000, "1200"->1200. Empty if none.
 - Never invent values. Use "" when absent.`;
 
 async function marketGemini(message) {

@@ -16,21 +16,21 @@ export const isSearchIntent = (message = "") => {
 // Category → the words a listing of that category would contain, so a search is
 // gated to the RIGHT category (a "home" search never returns a supermarket).
 const CATEGORY_SYNONYMS = {
-  real_estate: ["flat", "house", "home", "apartment", "villa", "plot", "land", "pg", "hostel", "room", "property", "site", "duplex", "1bhk", "2bhk", "3bhk", "bhk", "accommodation"],
-  vehicle: ["car", "bike", "scooter", "motorcycle", "motorbike", "truck", "auto", "vehicle", "swift", "activa", "bullet", "scooty", "cycle"],
-  service: ["plumber", "electrician", "carpenter", "painter", "mechanic", "tutor", "tuition", "maid", "cleaner", "cleaning", "salon", "beautician", "parlour", "cook", "driver", "ac service", "repair", "service"],
+  real_estate: ["apartment", "house", "home", "condo", "townhouse", "studio", "duplex", "flat", "room", "roommate", "property", "land", "lot", "1bed", "2bed", "3bed", "1br", "2br", "3br", "bedroom"],
+  vehicle: ["car", "truck", "suv", "sedan", "pickup", "van", "motorcycle", "bike", "scooter", "vehicle", "jeep", "minivan", "coupe", "rv", "trailer", "boat"],
+  service: ["plumber", "plumbing", "electrician", "electrical", "carpenter", "painter", "painting", "mechanic", "tutor", "tutoring", "cleaner", "cleaning", "maid", "landscaping", "lawn", "handyman", "mover", "moving", "hvac", "roofing", "babysitter", "nanny", "repair", "service"],
 };
 
 const esc = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 const parsePrice = (text) => {
-  const m = (text || "").toLowerCase().match(/(\d[\d.,]*)\s*(lakh|lac|lk|cr|crore|k|thousand)?/);
+  const t = (text || "").toLowerCase().replace(/[$,]/g, "");
+  const m = t.match(/(\d[\d.]*)\s*(k|thousand|m|mil|million)?/);
   if (!m) return "";
-  let n = parseFloat(m[1].replace(/,/g, ""));
+  let n = parseFloat(m[1]);
   const u = m[2] || "";
-  if (/lakh|lac|lk/.test(u)) n *= 100000;
-  else if (/cr|crore/.test(u)) n *= 10000000;
-  else if (/k|thousand/.test(u)) n *= 1000;
+  if (/^k|thousand/.test(u)) n *= 1000;
+  else if (/^m|mil|million/.test(u)) n *= 1000000;
   return n ? String(Math.round(n)) : "";
 };
 

@@ -20,20 +20,20 @@ export const isListingIntent = (message = "") => {
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 const titleCase = (s) => (s || "").replace(/\b\w/g, (c) => c.toUpperCase());
-const formatINR = (n) => Number(n).toLocaleString("en-IN");
+const formatUSD = (n) => Number(n).toLocaleString("en-US");
 
 const needsPrice = (d) =>
   d.listing_type === "sell" || d.listing_type === "rent" || d.category === "real_estate" || d.category === "vehicle";
 
-// Parse "65 lakhs" / "4 lakh" / "20k" / "1.5 cr" / "400000" -> plain rupee number.
+// Parse "$4,000" / "25k" / "1.2 million" / "1200" -> plain dollar number.
 const parsePrice = (text) => {
-  const m = (text || "").toLowerCase().match(/(\d[\d.,]*)\s*(lakh|lac|lk|cr|crore|k|thousand)?/);
+  const t = (text || "").toLowerCase().replace(/[$,]/g, "");
+  const m = t.match(/(\d[\d.]*)\s*(k|thousand|m|mil|million)?/);
   if (!m) return "";
-  let n = parseFloat(m[1].replace(/,/g, ""));
+  let n = parseFloat(m[1]);
   const u = m[2] || "";
-  if (/lakh|lac|lk/.test(u)) n *= 100000;
-  else if (/cr|crore/.test(u)) n *= 10000000;
-  else if (/k|thousand/.test(u)) n *= 1000;
+  if (/^k|thousand/.test(u)) n *= 1000;
+  else if (/^m|mil|million/.test(u)) n *= 1000000;
   return n ? String(Math.round(n)) : "";
 };
 
@@ -47,20 +47,20 @@ const buildTitle = (d) => {
 
 const priceLabel = (d) => {
   if (!d.price) return undefined;
-  if (d.listing_type === "rent") return `₹${formatINR(d.price)}/month`;
-  if (d.category === "service") return `₹${formatINR(d.price)} onwards`;
-  return `₹${formatINR(d.price)}`;
+  if (d.listing_type === "rent") return `$${formatUSD(d.price)}/month`;
+  if (d.category === "service") return `$${formatUSD(d.price)} and up`;
+  return `$${formatUSD(d.price)}`;
 };
 
 const QUESTION = {
-  item: "Sure! What would you like to list? (e.g. *flat*, *car*, *plumber service*) 🙂",
-  location: "Where is it located? Please tell the *area / city*. 📍",
+  item: "Sure! What would you like to list? (e.g. *apartment*, *car*, *plumbing service*) 🙂",
+  location: "Where is it located? Please tell the *city / area*. 📍",
   address:
-    "🏢 Please share the *full address* — *apartment / society name, flat / door no, area*.\n(e.g. _My Home Avatar, Flat 402, Madhapur_)",
-  pincode: "📮 What's the *6-digit pincode*? (helps buyers find the exact spot — reply *skip* if you don't know)",
-  price_sell: "What *price* do you want? (e.g. 5 lakhs, 4,00,000)",
-  price_rent: "What's the *monthly rent*? (e.g. 12000)",
-  contact_number: "Please share your *mobile number* so people can contact you. (or reply *same* to use this WhatsApp number) 📞",
+    "🏢 Please share the *full address* — *building / apt name, street, city*.\n(e.g. _The Heights, 1200 Oak St Apt 4B, Austin_)",
+  pincode: "📮 What's the *5-digit ZIP code*? (helps buyers find the exact spot — reply *skip* if you don't know)",
+  price_sell: "What *price* are you asking? (e.g. $4,000)",
+  price_rent: "What's the *monthly rent*? (e.g. $1,200)",
+  contact_number: "Please share your *phone number* so people can contact you. (or reply *same* to use this WhatsApp number) 📞",
 };
 
 async function createListing(d, contact) {
@@ -68,10 +68,11 @@ async function createListing(d, contact) {
   const pin = d.pincode && d.pincode !== "-" ? d.pincode : "";
   // Real estate: the full address the user typed IS the location line; fall back to
   // structured parts when no free-text address was given (e.g. one-shot listings).
-  const cityLine = [d.location, d.city].filter(Boolean).join(", ");
+  const cityParts = [d.location, d.city].filter(Boolean);
+  const cityLine = cityParts.filter((v, i) => cityParts.findIndex((x) => x.toLowerCase() === v.toLowerCase()) === i).join(", ");
   let base = isRealEstate ? d.address || [d.society, cityLine].filter(Boolean).join(", ") : cityLine || d.location || d.city;
   if (isRealEstate && d.city && base && !base.toLowerCase().includes(d.city.toLowerCase())) base = `${base}, ${d.city}`;
-  const fullLocation = [base, pin && `PIN ${pin}`].filter(Boolean).join(" - ");
+  const fullLocation = [base, pin && `ZIP ${pin}`].filter(Boolean).join(" - ");
 
   const listing = await Listing.create({
     title: d.title || buildTitle(d),
@@ -143,7 +144,7 @@ export const handleListingFlow = async ({ message, conversation, contact, preExt
   if (awaiting === "location" && !d.location && !d.city) d.location = titleCase(text);
   if (awaiting === "address") d.address = text.trim(); // their full reply IS the address
   if (awaiting === "pincode" && !d.pincode) {
-    const pin = (text.match(/\b\d{6}\b/) || [])[0];
+    const pin = (text.match(/\b\d{5}\b/) || [])[0];
     if (pin) d.pincode = pin;
     else if (/^(skip|no|none|na|don'?t\s*know|dont\s*know)$/i.test(text.trim())) d.pincode = "-";
   }

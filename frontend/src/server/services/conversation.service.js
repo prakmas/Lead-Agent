@@ -30,18 +30,19 @@ const channelName = {
 // Quick-pick budget ranges (the numbered options shown in the budget question).
 const BUDGET_PICKS = { 1: 10000, 2: 20000, 3: 35000, 4: 100000 };
 
-// Resolve a 6-digit Indian pincode to its area/district via the free India Post
-// API — lets a customer type a short pincode instead of spelling out an area.
+// Resolve a 5-digit US ZIP code to its city/state via the free Zippopotam.us API
+// — lets a customer type a short ZIP instead of spelling out a city.
 const resolvePincode = async (pin) => {
   try {
-    const res = await fetch(`https://api.postalpincode.in/pincode/${pin}`, {
+    const res = await fetch(`https://api.zippopotam.us/us/${pin}`, {
       headers: { Accept: "application/json" },
     });
+    if (!res.ok) return null;
     const body = await res.json();
-    const block = body?.[0];
-    if (block?.Status !== "Success" || !block.PostOffice?.length) return null;
-    const po = block.PostOffice.find((p) => p.DeliveryStatus === "Delivery") || block.PostOffice[0];
-    return { area: po.Name, district: po.District, state: po.State, pincode: pin };
+    const place = body?.places?.[0];
+    if (!place) return null;
+    // district = city so it matches city-level listings.
+    return { area: place["place name"], district: place["place name"], state: place["state abbreviation"], pincode: pin };
   } catch {
     return null;
   }
@@ -185,7 +186,7 @@ export const processInboundMessage = async (commonMessage) => {
   // searcher can type "560034" instead of spelling "Koramangala". BUT when we're
   // collecting a listing we need the raw pincode (the create flow stores it), so
   // skip the rewrite mid-listing.
-  if (/^\d{6}$/.test(commonMessage.message.trim()) && conversation.metadata?.flowStage !== "listing") {
+  if (/^\d{5}$/.test(commonMessage.message.trim()) && conversation.metadata?.flowStage !== "listing") {
     const resolved = await resolvePincode(commonMessage.message.trim());
     // Use the district (e.g. "Hyderabad") rather than the hyper-local post-office
     // name (e.g. "Cyberabad") so it reliably matches city-level listings.
