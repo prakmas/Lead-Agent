@@ -240,12 +240,16 @@ export const processInboundMessage = async (commonMessage) => {
   // (list vs find vs unclear) so any phrasing works ("buy"/"purchase"/"need"…).
   {
     const stage = conversation.metadata?.flowStage;
-    // Always classify the message so the user can SWITCH intent mid-flow (e.g.
-    // start "sell my car", then say "actually I want to buy a car").
     const preEx = await extractMarketplace(commonMessage.message);
+    // Mid-flow, only switch the flow on an EXPLICIT opposite-intent phrase — never on
+    // the AI's guess alone, so a plain answer like "I want 4000" (the price) does NOT
+    // get mistaken for a "search". Outside a flow, use the AI classification.
+    const msg = commonMessage.message.toLowerCase();
+    const wantsBuy = /\b(looking for|want to buy|wanna buy|want to purchase|going to buy|need to buy|searching for|search for|find me|show me|do you have|any .*(available|for sale))\b/.test(msg);
+    const wantsSell = /\b(sell my|i want to sell|wanna sell|want to sell|rent out|list my|post my|i'?m a |i am a |i provide|i offer|i run)\b/.test(msg);
     let route;
-    if (stage === "listing") route = preEx.intent === "SEARCH_LISTING" ? "search" : "create";
-    else if (stage === "search") route = preEx.intent === "CREATE_LISTING" ? "create" : "search";
+    if (stage === "listing") route = wantsBuy ? "search" : "create";
+    else if (stage === "search") route = wantsSell ? "create" : "search";
     else route = preEx.intent === "CREATE_LISTING" ? "create" : preEx.intent === "SEARCH_LISTING" ? "search" : "unknown";
 
     // If they switched flows mid-way, clear the abandoned flow's collected state.
