@@ -46,10 +46,34 @@ export const handleMarketplaceSearch = async ({ message, conversation, contact, 
   const d = state.data;
 
   const ex = preExtracted || (await extractMarketplace(text));
-  for (const f of ["category", "item", "location", "city", "state", "price", "listing_type"]) if (ex[f] && !d[f]) d[f] = ex[f];
 
-  if (state.awaiting === "item" && !d.item && !d.category) d.item = text.toLowerCase().slice(0, 40);
-  if (state.awaiting === "location" && !d.location && !d.city) d.location = text;
+  // The item the user names DRIVES the search. A different item = a fresh search, so
+  // reset the old location/price (never mix a previous request into a new one).
+  if (ex.item) {
+    if (ex.item !== d.item) {
+      d.item = ex.item;
+      d.location = "";
+      d.city = "";
+      d.price = "";
+    }
+    if (ex.category) d.category = ex.category;
+  }
+  if (ex.location) d.location = ex.location;
+  if (ex.city) d.city = ex.city;
+  if (ex.state && !d.state) d.state = ex.state;
+  if (ex.price && !d.price) d.price = ex.price;
+  if (ex.listing_type && !d.listing_type) d.listing_type = ex.listing_type;
+
+  // Awaited-field fallbacks — ONLY when the AI extracted nothing for that field AND
+  // the text actually looks like that field (not a fresh "looking for X" sentence or
+  // a price), so we never store junk like "i am looking for 3000" as the item.
+  const looksLikeRequest = /\b(looking for|want|need|buy|sell|purchase|rent|searching)\b/i.test(text);
+  if (state.awaiting === "item" && !d.item && !d.category) {
+    if (text && text.split(/\s+/).length <= 4 && !/\d{2,}/.test(text) && !looksLikeRequest) d.item = text.toLowerCase().slice(0, 40);
+  }
+  if (state.awaiting === "location" && !d.location && !d.city) {
+    if (text && !looksLikeRequest) d.location = text;
+  }
   if (state.awaiting === "budget" && !d.price) d.price = parsePrice(text);
 
   const saveState = (awaiting) => {
@@ -159,15 +183,16 @@ export const handleMarketplaceSearch = async ({ message, conversation, contact, 
     return (
       ack +
       `I looked but couldn't find ${ack ? "any other " : "a "}*${what}* in *${place}* right now. 😕\n\n` +
-      `I've saved your requirement — I'll message you here the moment a matching *${what}* is listed. ✅`
+      `I've saved your requirement — I'll message you here the moment a matching *${what}* is listed. ✅\n\n` +
+      "👉 Anything else? Tell me what to *find* or *list* next — or reply *done* to finish."
     );
   }
 
   return (
     ack +
     `Here's what I found for *${what}* in *${place}*: 🔎\n\n${all.join("\n\n")}\n\n` +
-    (external.listings.length ? `🌐 Some results are live from *${external.source}*.\n` : "") +
-    `Want me to search again, or *list* your own ${what}?`
+    (external.listings.length ? `🌐 Some results are live from *${external.source}*.\n\n` : "") +
+    "👉 Anything else? Search again, *list* your own, or reply *done* to finish."
   );
 };
 

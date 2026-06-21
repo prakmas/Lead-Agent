@@ -110,7 +110,7 @@ const summary = (l, d) =>
   `📍 ${l.location}` +
   (l.priceLabel ? `\n💰 ${l.priceLabel}` : "") +
   `\n📞 ${l.contactPhone || "—"}\n\n` +
-  'Message me anytime to list another item, or to *search* for something.';
+  "👉 Anything else? Tell me what to *list* or *find* next — or reply *done* to finish. 👍";
 
 // CREATE-listing agent: extracts structure from each message, asks only for the
 // missing required fields (mobile mandatory), then saves a clean listing. No OTP.
@@ -161,10 +161,12 @@ export const handleListingFlow = async ({ message, conversation, contact, preExt
   if (!d.item && !d.category) missing.push("item");
   if (isRealEstate) {
     if (!d.address && !d.society) missing.push("address");
-    if (!d.pincode) missing.push("pincode");
   } else if (!d.location && !d.city) {
     missing.push("location");
   }
+  // ZIP is required for EVERY listing so a vague "California" gets pinned to an exact
+  // spot buyers can find.
+  if (!d.pincode) missing.push("pincode");
   if (needsPrice(d) && !d.price) missing.push("price");
   if (!d.contact_number) missing.push("contact_number");
 

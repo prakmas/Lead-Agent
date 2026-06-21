@@ -235,6 +235,21 @@ export const processInboundMessage = async (commonMessage) => {
     return { conversation, lead: conversation.lead || null, reply, matches: [], intent: convIntent };
   }
 
+  // Explicit "done" — the user finished. Reset ALL flow state so the next request
+  // starts completely fresh and never carries over a previous listing/search.
+  if (/^(done|i'?m done|all done|that'?s all|that'?s it|finished|finish|nothing else|nothing more|no more|all set|that is all)\s*[.!]?$/i.test(commonMessage.message.trim())) {
+    conversation.metadata = { ...conversation.metadata, market: null, search: null, flowStage: null };
+    conversation.markModified("metadata");
+    const reply = "👍 All done! Whenever you want to *list* something or *find* something, just message me. Have a great day! 😊";
+    conversation.status = "open";
+    conversation.lastMessage = reply;
+    conversation.lastMessageAt = new Date();
+    await conversation.save();
+    const sendResult = await sendMessage({ channel: commonMessage.channel, to: commonMessage.contactId, text: reply });
+    await saveOutboundMessage(reply, channel, contact, conversation, sendResult);
+    return { conversation, lead: conversation.lead || null, reply, matches: [], intent: "done" };
+  }
+
   // ── Marketplace agent (AI-driven) — handles BOTH listing and searching ──────
   // Mid-flow continues the active flow; otherwise the AI classifies the intent
   // (list vs find vs unclear) so any phrasing works ("buy"/"purchase"/"need"…).
