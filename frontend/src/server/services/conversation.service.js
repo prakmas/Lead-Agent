@@ -241,12 +241,15 @@ export const processInboundMessage = async (commonMessage) => {
   {
     const stage = conversation.metadata?.flowStage;
     const preEx = await extractMarketplace(commonMessage.message);
-    // Mid-flow, only switch the flow on an EXPLICIT opposite-intent phrase — never on
-    // the AI's guess alone, so a plain answer like "I want 4000" (the price) does NOT
-    // get mistaken for a "search". Outside a flow, use the AI classification.
+    // Mid-flow, only switch sell<->buy when the user EXPLICITLY names what they want
+    // (an intent phrase AND a real item word). A plain answer like "I want 4000" or
+    // "I am looking for 3000" (a price) has no item word, so it stays in the flow.
+    // Outside a flow, use the AI classification.
     const msg = commonMessage.message.toLowerCase();
-    const wantsBuy = /\b(looking for|want to buy|wanna buy|want to purchase|going to buy|need to buy|searching for|search for|find me|show me|do you have|any .*(available|for sale))\b/.test(msg);
-    const wantsSell = /\b(sell my|i want to sell|wanna sell|want to sell|rent out|list my|post my|i'?m a |i am a |i provide|i offer|i run)\b/.test(msg);
+    const hasItem =
+      /\b(car|cars|truck|suv|van|jeep|sedan|coupe|bike|motorcycle|scooter|boat|rv|house|home|apartment|apartments|condo|townhouse|studio|flat|room|roommate|plot|land|property|plumber|electrician|carpenter|painter|mechanic|tutor|tutoring|cleaner|cleaning|maid|handyman|mover|moving|landscaper|landscaping|hvac|babysitter|nanny|salon|roofer|roofing)\b/.test(msg);
+    const wantsBuy = hasItem && /\b(looking for|want to buy|wanna buy|want to purchase|going to buy|need to buy|buy a|buy an|purchase a|need a|need an|searching for|search for|find me|show me|interested in)\b/.test(msg);
+    const wantsSell = hasItem && /\b(sell my|i want to sell|wanna sell|want to sell|rent out|rent my|list my|post my|i'?m a |i am a |i provide|i offer|i run)\b/.test(msg);
     let route;
     if (stage === "listing") route = wantsBuy ? "search" : "create";
     else if (stage === "search") route = wantsSell ? "create" : "search";
