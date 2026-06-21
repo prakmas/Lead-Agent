@@ -34,9 +34,36 @@ const CITY_STATE = {
   "new orleans": "LA",
 };
 
+// Representative ZIP per state (largest city) — fallback when we only know the state.
+const STATE_ZIP = {
+  AL: "35203", AK: "99501", AZ: "85003", AR: "72201", CA: "90012", CO: "80202", CT: "06103",
+  DE: "19801", FL: "33101", GA: "30303", HI: "96813", ID: "83702", IL: "60601", IN: "46204",
+  IA: "50309", KS: "67202", KY: "40202", LA: "70112", ME: "04101", MD: "21201", MA: "02108",
+  MI: "48226", MN: "55401", MS: "39201", MO: "64106", MT: "59101", NE: "68102", NV: "89101",
+  NH: "03101", NJ: "07102", NM: "87102", NY: "10001", NC: "28202", ND: "58102", OH: "43215",
+  OK: "73102", OR: "97204", PA: "19103", RI: "02903", SC: "29201", SD: "57104", TN: "37203",
+  TX: "77002", UT: "84101", VT: "05401", VA: "23451", WA: "98101", WV: "25301", WI: "53202",
+  WY: "82001", DC: "20001",
+};
+
 const enc = encodeURIComponent;
 const slug = (s) => (s || "").trim().replace(/\s+/g, "-");
 const cityCap = (s) => (s || "").trim().replace(/\b\w/g, (c) => c.toUpperCase());
+
+// Resolve the best ZIP for a location: explicit zip > city+state lookup > state default.
+const resolveZip = async ({ zip, city, stateCode }) => {
+  if (zip && /^\d{5}$/.test(zip)) return zip;
+  if (city && stateCode) {
+    try {
+      const res = await fetch(`https://api.zippopotam.us/us/${stateCode}/${enc(city)}`, { headers: { Accept: "application/json" } });
+      if (res.ok) {
+        const pc = (await res.json())?.places?.[0]?.["post code"];
+        if (pc) return pc;
+      }
+    } catch {}
+  }
+  return stateCode && STATE_ZIP[stateCode] ? STATE_ZIP[stateCode] : "";
+};
 
 const resolveState = ({ state, city }) => {
   if (state) {
@@ -52,7 +79,8 @@ const resolveState = ({ state, city }) => {
 const buildSource = ({ category, listing_type, item, city, stateCode, zip }) => {
   const q = enc(item || "");
   if (category === "vehicle") {
-    return { name: "Cars.com", url: `https://www.cars.com/shopping/results/?stock_type=used&maximum_distance=50&zip=${zip || "78701"}&keyword=${q}` };
+    if (!zip) return null; // need a real ZIP, otherwise every search returns the same place
+    return { name: "Cars.com", url: `https://www.cars.com/shopping/results/?stock_type=used&maximum_distance=50&zip=${zip}&keyword=${q}` };
   }
   if (category === "real_estate") {
     if (listing_type === "rent") {
@@ -98,7 +126,7 @@ async function structureListings(markdown, { item, city, limit }) {
       model: env.ai.openaiModel,
       ...(isGpt5() ? { reasoning_effort: "minimal" } : { temperature: 0.1 }),
       response_format: { type: "json_object" },
-      messages: [{ role: "system", content: sys }, { role: "user", content: markdown.slice(0, 12000) }],
+      messages: [{ role: "system", content: sys }, { role: "user", content: markdown.slice(0, 18000) }],
     }),
   });
   if (!res.ok) throw new Error(`OpenAI HTTP ${res.status}`);
@@ -125,19 +153,22 @@ const norm = (l) => {
 export const getExternalListings = async ({ category, listing_type, item, city, state, zip, limit = 5 }) => {
   if (!env.external.firecrawlKey || limit <= 0) return { source: null, listings: [] };
   const stateCode = resolveState({ state, city });
-  const cacheKey = `${category}:${listing_type || ""}:${(city || zip || "").toLowerCase()}:${(item || "").toLowerCase()}`;
+  // Vehicles need a precise ZIP — resolve from city/state so different places give
+  // different results (fixes "New York" returning Austin cars).
+  const useZip = category === "vehicle" ? await resolveZip({ zip, city, stateCode }) : zip;
+  const cacheKey = `${category}:${listing_type || ""}:${(city || "").toLowerCase()}:${stateCode}:${useZip || ""}:${(item || "").toLowerCase()}`;
   try {
     const cached = await ExternalListing.findOne({ cacheKey }).sort({ createdAt: -1 });
     if (cached) return { source: cached.source, listings: cached.listings.slice(0, limit) };
   } catch {}
-  const src = buildSource({ category, listing_type, item, city, stateCode, zip });
+  const src = buildSource({ category, listing_type, item, city, stateCode, zip: useZip });
   if (!src) return { source: null, listings: [] };
   try {
     const md = await firecrawlScrape(src.url);
     if (!md) return { source: src.name, listings: [] };
-    const raw = await structureListings(md, { item, city: city || zip, limit });
+    const raw = await structureListings(md, { item, city: city || stateCode || useZip, limit });
     const listings = raw.map(norm).filter((l) => l.title && (l.price || l.url || l.location)).slice(0, limit);
-    ExternalListing.create({ cacheKey, source: src.name, category, city: city || zip, item, listings }).catch(() => {});
+    ExternalListing.create({ cacheKey, source: src.name, category, city: city || stateCode || useZip, item, listings }).catch(() => {});
     return { source: src.name, listings };
   } catch (e) {
     console.error("[externalSource]", src?.name, e.message);
