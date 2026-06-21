@@ -58,9 +58,15 @@ export const handleMarketplaceSearch = async ({ message, conversation, contact, 
     }
     if (ex.category) d.category = ex.category;
   }
-  if (ex.location) d.location = ex.location;
-  if (ex.city) d.city = ex.city;
-  if (ex.state && !d.state) d.state = ex.state;
+  // A new place in this message REPLACES the old one and re-derives the state — so a
+  // stale "Texas" never sticks to a new "Miami".
+  if (ex.city || ex.location) {
+    if (ex.location) d.location = ex.location;
+    if (ex.city) d.city = ex.city;
+    d.state = ex.state || "";
+  } else if (ex.state) {
+    d.state = ex.state;
+  }
   if (ex.price && !d.price) d.price = ex.price;
   if (ex.listing_type && !d.listing_type) d.listing_type = ex.listing_type;
 
@@ -72,9 +78,17 @@ export const handleMarketplaceSearch = async ({ message, conversation, contact, 
     if (text && text.split(/\s+/).length <= 4 && !/\d{2,}/.test(text) && !looksLikeRequest) d.item = text.toLowerCase().slice(0, 40);
   }
   if (state.awaiting === "location" && !d.location && !d.city) {
-    if (text && !looksLikeRequest) d.location = text;
+    if (text && !looksLikeRequest) {
+      d.location = text;
+      d.state = ""; // re-derive state from this new place
+    }
   }
   if (state.awaiting === "budget" && !d.price) d.price = parsePrice(text);
+
+  // "any city in USA" / "anywhere" isn't searchable — we look city by city.
+  const isVague = (s) => /\b(any|anywhere|everywhere|usa|u\.?s\.?a?|united states|nationwide|all over|whole country)\b/i.test(s || "");
+  if (isVague(d.location)) d.location = "";
+  if (isVague(d.city)) d.city = "";
 
   const saveState = (awaiting) => {
     state.awaiting = awaiting;
@@ -88,7 +102,7 @@ export const handleMarketplaceSearch = async ({ message, conversation, contact, 
   }
   if (!d.location && !d.city) {
     saveState("location");
-    return "Which *city or area* should I search in? 📍";
+    return "I search city by city — which *city* should I look in? (e.g. *Austin*, *Dallas*, *Miami*) 📍";
   }
 
   const item = (d.item || "").toLowerCase();
@@ -142,7 +156,15 @@ export const handleMarketplaceSearch = async ({ message, conversation, contact, 
     requirements: { location: place, budgetMax: Number(d.price) || undefined, category: what, keywords: [item].filter(Boolean) },
   }).catch(() => {});
 
-  conversation.metadata = { ...conversation.metadata, search: null, flowStage: null };
+  // KEEP the item/category in context so a natural follow-up ("search another city",
+  // "higher budget") refines the SAME search instead of restarting. The user clears
+  // it with "Hi"/"done", or by naming a new item (handled above). Only the answered
+  // location/price/awaiting are dropped.
+  conversation.metadata = {
+    ...conversation.metadata,
+    search: { data: { item: d.item, category: d.category }, awaiting: null },
+    flowStage: "search",
+  };
   conversation.markModified("metadata");
 
   // When our own DB is thin, pull live listings from external US marketplaces
