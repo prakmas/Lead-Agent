@@ -26,6 +26,17 @@ Rules:
 
 const stripFences = (s) => s.replace(/^```(?:json)?/i, "").replace(/```$/i, "").trim();
 
+// gpt-5* models reject a custom temperature (only the default 1). For those we use
+// reasoning_effort:"minimal" to stay fast; other models keep a low temperature.
+const isGpt5 = () => /^gpt-5/i.test(env.ai.openaiModel || "");
+const openaiPayload = (messages) =>
+  JSON.stringify({
+    model: env.ai.openaiModel,
+    ...(isGpt5() ? { reasoning_effort: "minimal" } : { temperature: 0.1 }),
+    response_format: { type: "json_object" },
+    messages,
+  });
+
 async function geminiExtract(message) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${env.ai.geminiModel}:generateContent?key=${env.ai.geminiApiKey}`;
   const res = await fetch(url, {
@@ -48,15 +59,7 @@ async function openaiExtract(message) {
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${env.ai.openaiApiKey}` },
-    body: JSON.stringify({
-      model: env.ai.openaiModel,
-      temperature: 0.1,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: message },
-      ],
-    }),
+    body: openaiPayload([{ role: "system", content: SYSTEM_PROMPT }, { role: "user", content: message }]),
   });
   if (!res.ok) throw new Error(`OpenAI listing extract failed: ${await res.text()}`);
   const body = await res.json();
@@ -134,12 +137,7 @@ export const interpretField = async (field, text) => {
       const res = await fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${env.ai.openaiApiKey}` },
-        body: JSON.stringify({
-          model: env.ai.openaiModel,
-          temperature: 0.1,
-          response_format: { type: "json_object" },
-          messages: [{ role: "system", content: system }, { role: "user", content: text }],
-        }),
+        body: openaiPayload([{ role: "system", content: system }, { role: "user", content: text }]),
       });
       if (!res.ok) throw new Error(await res.text());
       raw = JSON.parse(stripFences((await res.json()).choices?.[0]?.message?.content || "{}"));
@@ -212,12 +210,7 @@ async function marketOpenAI(message) {
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${env.ai.openaiApiKey}` },
-    body: JSON.stringify({
-      model: env.ai.openaiModel,
-      temperature: 0.1,
-      response_format: { type: "json_object" },
-      messages: [{ role: "system", content: MARKET_PROMPT }, { role: "user", content: message }],
-    }),
+    body: openaiPayload([{ role: "system", content: MARKET_PROMPT }, { role: "user", content: message }]),
   });
   if (!res.ok) throw new Error(await res.text());
   return JSON.parse(stripFences((await res.json()).choices?.[0]?.message?.content || "{}"));
