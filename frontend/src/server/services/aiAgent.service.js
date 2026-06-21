@@ -10,12 +10,20 @@ const NUMBER_EMOJI = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6�
 // Friendly welcome + a numbered menu of services the customer can pick from.
 export const buildWelcomeMenu = () => {
   return (
-    "Hi! 👋 Welcome. I can help you two ways:\n\n" +
-    "🛒 *List* something to sell or rent — just tell me, e.g.\n" +
-    '   "sell my car for 4 lakhs" · "rent my flat for 12000"\n\n' +
-    "🔎 *Find* something you need — e.g.\n" +
-    '   "looking for a car in Hyderabad" · "need a plumber in Kukatpally"\n\n' +
-    "What would you like to do? 🙂"
+    "👋 *Welcome!* I'm your AI assistant.\n" +
+    "I can help you with two things:\n" +
+    "━━━━━━━━━━━━━━━\n" +
+    "🛒 *SELL / RENT* something\n" +
+    "Just tell me, like:\n" +
+    '_“sell my car for 4 lakhs”_\n' +
+    '_“rent my flat for 12000”_\n' +
+    '_“i am a plumber”_\n\n' +
+    "🔎 *BUY / FIND* something\n" +
+    "Tell me what you need:\n" +
+    '_“looking for a car in Hyderabad”_\n' +
+    '_“need a plumber in Kukatpally”_\n' +
+    "━━━━━━━━━━━━━━━\n" +
+    "So… what would you like to do today? 😊"
   );
 };
 

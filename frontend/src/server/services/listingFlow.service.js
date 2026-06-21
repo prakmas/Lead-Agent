@@ -81,6 +81,7 @@ async function createListing(d, contact) {
       area: d.location || undefined,
       city: d.city || undefined,
       source: "whatsapp",
+      whatsappFrom: contact.phone || undefined, // the WhatsApp sender (for own-listing detection)
     },
   });
   triggerRematchForNewListing(listing).catch(() => {});

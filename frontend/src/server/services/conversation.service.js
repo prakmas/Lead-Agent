@@ -237,12 +237,17 @@ export const processInboundMessage = async (commonMessage) => {
   // (list vs find vs unclear) so any phrasing works ("buy"/"purchase"/"need"…).
   {
     const stage = conversation.metadata?.flowStage;
-    let route = stage === "listing" ? "create" : stage === "search" ? "search" : null;
-    let preEx = null;
-    if (!route) {
-      preEx = await extractMarketplace(commonMessage.message);
-      route = preEx.intent === "CREATE_LISTING" ? "create" : preEx.intent === "SEARCH_LISTING" ? "search" : "unknown";
-    }
+    // Always classify the message so the user can SWITCH intent mid-flow (e.g.
+    // start "sell my car", then say "actually I want to buy a car").
+    const preEx = await extractMarketplace(commonMessage.message);
+    let route;
+    if (stage === "listing") route = preEx.intent === "SEARCH_LISTING" ? "search" : "create";
+    else if (stage === "search") route = preEx.intent === "CREATE_LISTING" ? "create" : "search";
+    else route = preEx.intent === "CREATE_LISTING" ? "create" : preEx.intent === "SEARCH_LISTING" ? "search" : "unknown";
+
+    // If they switched flows mid-way, clear the abandoned flow's collected state.
+    if (stage === "listing" && route !== "create") conversation.metadata = { ...conversation.metadata, market: null };
+    if (stage === "search" && route !== "search") conversation.metadata = { ...conversation.metadata, search: null };
 
     let reply;
     if (route === "create") reply = await handleListingFlow({ message: commonMessage.message, conversation, contact, preExtracted: preEx });
