@@ -42,6 +42,12 @@ const env = {
     geminiApiKey: process.env.GEMINI_API_KEY || "",
     geminiModel: process.env.GEMINI_MODEL || "gemini-2.5-flash",
   },
+  // External marketplace sources (used to supplement our own DB on search).
+  external: {
+    firecrawlKey: process.env.FIRECRAWL_API_KEY || "",
+    // Only fetch from the web when our DB returns fewer than this many results.
+    minDbResults: Number(process.env.EXTERNAL_MIN_DB_RESULTS || 3),
+  },
 };
 
 export default env;

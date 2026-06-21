@@ -1,6 +1,8 @@
 import Listing from "../models/Listing.js";
 import Lead from "../models/Lead.js";
+import env from "../config/env.js";
 import { extractMarketplace } from "./listingExtractor.service.js";
+import { getExternalListings } from "./externalSource.service.js";
 
 // SEARCH-intent keywords (buyer looking for something).
 const SEARCH_WORDS = [
@@ -44,7 +46,7 @@ export const handleMarketplaceSearch = async ({ message, conversation, contact, 
   const d = state.data;
 
   const ex = preExtracted || (await extractMarketplace(text));
-  for (const f of ["category", "item", "location", "city", "price"]) if (ex[f] && !d[f]) d[f] = ex[f];
+  for (const f of ["category", "item", "location", "city", "state", "price", "listing_type"]) if (ex[f] && !d[f]) d[f] = ex[f];
 
   if (state.awaiting === "item" && !d.item && !d.category) d.item = text.toLowerCase().slice(0, 40);
   if (state.awaiting === "location" && !d.location && !d.city) d.location = text;
@@ -119,12 +121,41 @@ export const handleMarketplaceSearch = async ({ message, conversation, contact, 
   conversation.metadata = { ...conversation.metadata, search: null, flowStage: null };
   conversation.markModified("metadata");
 
+  // When our own DB is thin, pull live listings from external US marketplaces
+  // (Cars.com / Trulia / Rent.com / Yelp) to supplement — so the user always gets
+  // something useful instead of "nothing available".
+  let external = { source: null, listings: [] };
+  if (results.length < env.external.minDbResults) {
+    external = await getExternalListings({
+      category: d.category,
+      listing_type: d.listing_type,
+      item: what,
+      city: d.city || d.location || place,
+      state: d.state,
+      limit: 5 - results.length,
+    });
+  }
+
   // Acknowledge the user's own existing listing of this type.
   const ack = ownMatch
-    ? `By the way, I see you already have *${ownMatch.title}* listed. 🙂 Looking to *buy a different ${what}*? Here's what others have:\n\n`
+    ? `By the way, I see you already have *${ownMatch.title}* listed. 🙂 Looking to *buy a different ${what}*? Here's what's out there:\n\n`
     : "";
 
-  if (!results.length) {
+  const dbBlock = results.map(
+    (L, i) => `*${i + 1}. ${L.title}*${L.priceLabel ? ` — ${L.priceLabel}` : ""}\n📍 ${L.location}${L.contactPhone ? `\n📞 ${L.contactPhone}` : ""}`,
+  );
+  const exBlock = external.listings.map((L, i) => {
+    const n = results.length + i + 1;
+    return (
+      `*${n}. ${L.title}*${L.priceLabel ? ` — ${L.priceLabel}` : ""}` +
+      (L.location ? `\n📍 ${L.location}` : "") +
+      (L.url ? `\n🔗 ${L.url}` : "") +
+      `\n_via ${external.source}_`
+    );
+  });
+  const all = [...dbBlock, ...exBlock];
+
+  if (!all.length) {
     return (
       ack +
       `I looked but couldn't find ${ack ? "any other " : "a "}*${what}* in *${place}* right now. 😕\n\n` +
@@ -132,14 +163,11 @@ export const handleMarketplaceSearch = async ({ message, conversation, contact, 
     );
   }
 
-  const list = results
-    .map((L, i) => `*${i + 1}. ${L.title}*${L.priceLabel ? ` — ${L.priceLabel}` : ""}\n📍 ${L.location}${L.contactPhone ? `\n📞 ${L.contactPhone}` : ""}`)
-    .join("\n\n");
-
   return (
     ack +
-    `Here's what I found for *${what}* in *${place}*: 🔎\n\n${list}\n\n` +
-    `You can contact them directly. Want me to search again, or *list* your own ${what}?`
+    `Here's what I found for *${what}* in *${place}*: 🔎\n\n${all.join("\n\n")}\n\n` +
+    (external.listings.length ? `🌐 Some results are live from *${external.source}*.\n` : "") +
+    `Want me to search again, or *list* your own ${what}?`
   );
 };
 
